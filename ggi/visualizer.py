@@ -1,6 +1,6 @@
 """
 Export the memory graph as an interactive HTML visualisation using pyvis,
-as a comprehensive standalone interactive web app with Q&A panel,
+as a comprehensive standalone interactive web app with Q&A panel (2D Fluid & 3D Galaxy views),
 or as static DOT / Mermaid diagrams.
 """
 
@@ -48,7 +48,8 @@ def to_interactive_html(
 ) -> Path:
     """
     Generate a full-featured, standalone interactive web application containing:
-    - Interactive force-directed network graph (pan, zoom, click, physics, kind filters)
+    - 2D Fluid Dynamic Moving Graph with continuous physics & animated flowing pulses
+    - 3D Galaxy View with orbital camera rotation, glowing nebulae, and particle streams
     - Node Details Inspector side panel
     - Integrated Question & Answer (Q&A) Panel powered by graph context intelligence
     - Graph-to-Q&A cross-linking (clicking cited nodes highlights them on canvas)
@@ -65,10 +66,11 @@ def to_interactive_html(
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GGI — {proj_title}</title>
   <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     :root {{
-      --bg: #090d16;
-      --card-bg: rgba(18, 24, 38, 0.85);
+      --bg: #070a13;
+      --card-bg: rgba(15, 23, 42, 0.88);
       --border: rgba(255, 255, 255, 0.1);
       --accent: #38bdf8;
       --accent-hover: #0284c7;
@@ -123,7 +125,7 @@ def to_interactive_html(
     .toolbar {{
       display: flex;
       align-items: center;
-      gap: 0.6rem;
+      gap: 0.5rem;
     }}
     .search-input {{
       background: rgba(0, 0, 0, 0.4);
@@ -133,12 +135,12 @@ def to_interactive_html(
       color: var(--text);
       font-size: 0.85rem;
       outline: none;
-      width: 200px;
+      width: 180px;
       transition: all 0.2s;
     }}
     .search-input:focus {{
       border-color: var(--accent);
-      width: 260px;
+      width: 240px;
     }}
     .btn {{
       background: rgba(255, 255, 255, 0.08);
@@ -152,16 +154,30 @@ def to_interactive_html(
       align-items: center;
       gap: 0.4rem;
       transition: all 0.2s;
+      user-select: none;
     }}
     .btn:hover {{ background: rgba(255, 255, 255, 0.15); }}
     .btn.active {{ background: var(--accent); color: #04101e; font-weight: 600; border-color: var(--accent); }}
 
-    /* Canvas */
+    /* Canvas Containers */
     #network {{
       flex: 1;
       width: 100%;
       height: calc(100vh - 56px);
       outline: none;
+      position: absolute;
+      top: 56px;
+      left: 0;
+    }}
+    #network-3d {{
+      flex: 1;
+      width: 100%;
+      height: calc(100vh - 56px);
+      outline: none;
+      position: absolute;
+      top: 56px;
+      left: 0;
+      display: none;
     }}
 
     /* Legend Overlay */
@@ -192,6 +208,30 @@ def to_interactive_html(
       height: 12px;
       border-radius: 50%;
       display: inline-block;
+    }}
+
+    /* Motion Status Badge */
+    .motion-indicator {{
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.74rem;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 0.2rem 0.5rem;
+      border-radius: 12px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }}
+    .pulse-dot {{
+      width: 6px;
+      height: 6px;
+      background: #38bdf8;
+      border-radius: 50%;
+      animation: blink 1.2s infinite ease-in-out;
+    }}
+    @keyframes blink {{
+      0%, 100% {{ opacity: 1; transform: scale(1); }}
+      50% {{ opacity: 0.3; transform: scale(0.7); }}
     }}
 
     /* Right Sidebar (Q&A and Inspector) */
@@ -451,18 +491,25 @@ def to_interactive_html(
       <div class="brand">
         <span class="logo">🧠</span>
         <span>GGI Memory Graph</span>
-        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-left: 0.5rem;">{proj_title}</span>
+        <span class="motion-indicator"><span class="pulse-dot"></span> Live Motion</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; margin-left: 0.4rem;">{proj_title}</span>
       </div>
 
       <div class="toolbar">
         <input type="text" id="search-input" class="search-input" placeholder="Search node or file..." />
+        <button id="btn-view-mode" class="btn">🌌 3D Galaxy</button>
+        <button id="btn-motion" class="btn active">🌊 Float Motion</button>
+        <button id="btn-pulses" class="btn active">✨ Flow Pulses</button>
         <button id="btn-fit" class="btn">🎯 Center</button>
-        <button id="btn-physics" class="btn active">⚡ Physics</button>
         <button id="btn-toggle-sidebar" class="btn">💬 Q&A Panel</button>
       </div>
     </div>
 
+    <!-- 2D Canvas -->
     <div id="network"></div>
+
+    <!-- 3D Canvas -->
+    <div id="network-3d"></div>
 
     <div class="legend">
       <div style="font-weight: 600; margin-bottom: 0.2rem; color: var(--text-muted);">Node Kinds</div>
@@ -538,7 +585,7 @@ def to_interactive_html(
       annotation: "ellipse"
     }};
 
-    // Format nodes for vis.js
+    // Format nodes for 2D vis.js
     const nodes = new vis.DataSet(
       rawData.nodes.map(n => {{
         const label = n.path ? n.path.split("/").pop() : (n.title || n.name || n.id);
@@ -575,9 +622,9 @@ def to_interactive_html(
       }}))
     );
 
-    // Initialise Network
-    const container = document.getElementById("network");
-    const options = {{
+    // Initialise 2D Network
+    const container2d = document.getElementById("network");
+    const options2d = {{
       nodes: {{
         borderWidth: 1.5,
         shadow: true
@@ -587,13 +634,22 @@ def to_interactive_html(
         shadow: true
       }},
       physics: {{
-        barnesHut: {{
-          gravitationalConstant: -2800,
-          centralGravity: 0.3,
-          springLength: 120,
-          springConstant: 0.04
+        solver: "forceAtlas2Based",
+        forceAtlas2Based: {{
+          gravitationalConstant: -45,
+          centralGravity: 0.012,
+          springLength: 95,
+          springConstant: 0.08,
+          damping: 0.18,
+          avoidOverlap: 0.25
         }},
-        stabilization: {{ iterations: 120 }}
+        maxVelocity: 18,
+        minVelocity: 0.02,
+        stabilization: {{
+          enabled: true,
+          iterations: 35,
+          updateInterval: 10
+        }}
       }},
       interaction: {{
         hover: true,
@@ -602,10 +658,152 @@ def to_interactive_html(
       }}
     }};
 
-    const network = new vis.Network(container, {{ nodes, edges }}, options);
+    const network2d = new vis.Network(container2d, {{ nodes, edges }}, options2d);
 
-    // Node click handler
-    network.on("click", function(params) {{
+    // ── Continuous 2D Motion & Animated Edge Flow Pulses ───────────────────────
+    let motionEnabled = true;
+    let pulsesEnabled = true;
+    let is3DMode = false;
+    let graph3dInstance = null;
+
+    // Keep 2D simulation continuously alive and floating
+    let motionInterval = setInterval(() => {{
+      if (motionEnabled && network2d && !is3DMode) {{
+        network2d.startSimulation();
+      }}
+    }}, 250);
+
+    // Animated glowing edge pulses on 2D canvas
+    network2d.on("afterDrawing", function(ctx) {{
+      if (!pulsesEnabled || is3DMode) return;
+      const now = performance.now() * 0.001;
+      const allEdges = edges.get();
+      const positions = network2d.getPositions();
+
+      ctx.save();
+      allEdges.forEach((edge, idx) => {{
+        const u = positions[edge.from];
+        const v = positions[edge.to];
+        if (!u || !v) return;
+
+        const speed = 0.5;
+        const offset = (idx * 0.23) % 1;
+        const t = (now * speed + offset) % 1;
+
+        const px = u.x + (v.x - u.x) * t;
+        const py = u.y + (v.y - u.y) * t;
+
+        const isCall = edge.raw && (edge.raw.kind === "calls" || (edge.raw.label && edge.raw.label.toLowerCase().includes("api")));
+        const isChange = edge.raw && (edge.raw.kind === "implements" || edge.raw.kind === "corrects");
+        const pulseColor = isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
+
+        ctx.beginPath();
+        ctx.arc(px, py, 3.8, 0, 2 * Math.PI);
+        ctx.fillStyle = pulseColor;
+        ctx.shadowColor = pulseColor;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+
+        const t2 = (t + 0.5) % 1;
+        const px2 = u.x + (v.x - u.x) * t2;
+        const py2 = u.y + (v.y - u.y) * t2;
+        ctx.beginPath();
+        ctx.arc(px2, py2, 2.2, 0, 2 * Math.PI);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.shadowColor = pulseColor;
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }});
+      ctx.restore();
+    }});
+
+    function animLoop() {{
+      if (pulsesEnabled && !is3DMode) {{
+        network2d.redraw();
+      }}
+      requestAnimationFrame(animLoop);
+    }}
+    requestAnimationFrame(animLoop);
+
+    // ── 3D Galaxy View Implementation ─────────────────────────────────────────
+    function init3DView() {{
+      const container3d = document.getElementById("network-3d");
+      if (typeof ForceGraph3D === "undefined") {{
+        alert("3D library loading... please check network connection or use 2D Fluid mode.");
+        return;
+      }}
+
+      const gData = {{
+        nodes: rawData.nodes.map(n => ({{
+          id: n.id,
+          name: n.path ? n.path.split("/").pop() : (n.title || n.name || n.id),
+          kind: n.kind,
+          color: KIND_COLORS[n.kind] || "#94a3b8",
+          val: n.kind === "directory" ? 6 : (n.kind === "change" ? 5 : 3),
+          raw: n
+        }})),
+        links: rawData.edges.map(e => ({{
+          source: e.source,
+          target: e.target,
+          label: e.label || e.kind || "",
+          raw: e
+        }}))
+      }};
+
+      graph3dInstance = ForceGraph3D()(container3d)
+        .graphData(gData)
+        .nodeLabel(n => `<b>${{n.raw.path || n.raw.title || n.id}}</b> [${{n.kind}}]`)
+        .nodeColor(n => n.color)
+        .nodeRelSize(4.5)
+        .linkDirectionalParticles(3)
+        .linkDirectionalParticleSpeed(0.006)
+        .linkDirectionalParticleWidth(2.5)
+        .linkDirectionalParticleColor(l => {{
+          const isCall = l.raw && (l.raw.kind === "calls" || (l.raw.label && l.raw.label.toLowerCase().includes("api")));
+          const isChange = l.raw && (l.raw.kind === "implements" || l.raw.kind === "corrects");
+          return isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
+        }})
+        .linkColor(() => "rgba(148, 163, 184, 0.35)")
+        .onNodeClick(n => {{
+          inspectNode(n.id);
+          // Fly camera to node
+          const distance = 40;
+          const distRatio = 1 + distance/Math.hypot(n.x, n.y, n.z);
+          graph3dInstance.cameraPosition(
+            {{ x: n.x * distRatio, y: n.y * distRatio, z: n.z * distRatio }},
+            n,
+            1200
+          );
+        }});
+
+      // Auto-orbiting camera movement
+      graph3dInstance.controls().autoRotate = true;
+      graph3dInstance.controls().autoRotateSpeed = 0.8;
+    }}
+
+    // Toggle 2D / 3D Mode
+    document.getElementById("btn-view-mode").onclick = function() {{
+      is3DMode = !is3DMode;
+      const c2d = document.getElementById("network");
+      const c3d = document.getElementById("network-3d");
+
+      if (is3DMode) {{
+        this.textContent = "🪐 2D Fluid";
+        this.classList.add("active");
+        c2d.style.display = "none";
+        c3d.style.display = "block";
+        if (!graph3dInstance) init3DView();
+      }} else {{
+        this.textContent = "🌌 3D Galaxy";
+        this.classList.remove("active");
+        c3d.style.display = "none";
+        c2d.style.display = "block";
+        network2d.fit();
+      }}
+    }};
+
+    // 2D Node click handler
+    network2d.on("click", function(params) {{
       if (params.nodes.length > 0) {{
         const nodeId = params.nodes[0];
         inspectNode(nodeId);
@@ -614,22 +812,13 @@ def to_interactive_html(
 
     // Inspector Rendering
     function inspectNode(nodeId) {{
-      const n = nodes.get(nodeId);
+      const n = nodes.get(nodeId) || (rawData.nodes.find(x => x.id === nodeId));
       if (!n) return;
-      const raw = n.raw;
+      const raw = n.raw || n;
       switchTab('inspector');
 
       const incomingEdges = edges.get({{ filter: e => e.to === nodeId }});
       const outgoingEdges = edges.get({{ filter: e => e.from === nodeId }});
-
-      // Find connected changes
-      const connectedChangeIds = incomingEdges
-        .map(e => e.from)
-        .concat(outgoingEdges.map(e => e.to))
-        .filter(id => {{
-          const target = nodes.get(id);
-          return target && target.raw.kind === "change";
-        }});
 
       const html = `
         <div class="node-header">
@@ -673,13 +862,27 @@ def to_interactive_html(
     }}
 
     function getNodeName(id) {{
-      const n = nodes.get(id);
-      return n ? (n.raw.path || n.raw.title || n.raw.name || id) : id;
+      const n = nodes.get(id) || rawData.nodes.find(x => x.id === id);
+      return n ? ((n.raw ? n.raw.path : n.path) || (n.raw ? n.raw.title : n.title) || id) : id;
     }}
 
     function focusNode(nodeId) {{
-      network.focus(nodeId, {{ scale: 1.2, animation: {{ duration: 600, easingFunction: "easeInOutQuad" }} }});
-      network.selectNodes([nodeId]);
+      if (is3DMode && graph3dInstance) {{
+        const gData = graph3dInstance.graphData();
+        const n3d = gData.nodes.find(n => n.id === nodeId);
+        if (n3d) {{
+          const distance = 40;
+          const distRatio = 1 + distance/Math.hypot(n3d.x, n3d.y, n3d.z);
+          graph3dInstance.cameraPosition(
+            {{ x: n3d.x * distRatio, y: n3d.y * distRatio, z: n3d.z * distRatio }},
+            n3d,
+            1200
+          );
+        }}
+      }} else {{
+        network2d.focus(nodeId, {{ scale: 1.2, animation: {{ duration: 600, easingFunction: "easeInOutQuad" }} }});
+        network2d.selectNodes([nodeId]);
+      }}
       inspectNode(nodeId);
     }}
 
@@ -692,12 +895,30 @@ def to_interactive_html(
     }}
 
     // Toolbar buttons
-    document.getElementById("btn-fit").onclick = () => network.fit({{ animation: {{ duration: 500 }} }});
-    let physicsEnabled = true;
-    document.getElementById("btn-physics").onclick = function() {{
-      physicsEnabled = !physicsEnabled;
-      network.setOptions({{ physics: {{ enabled: physicsEnabled }} }});
-      this.classList.toggle("active", physicsEnabled);
+    document.getElementById("btn-fit").onclick = () => {{
+      if (is3DMode && graph3dInstance) {{
+        graph3dInstance.zoomToFit(800);
+      }} else {{
+        network2d.fit({{ animation: {{ duration: 500 }} }});
+      }}
+    }};
+
+    document.getElementById("btn-motion").onclick = function() {{
+      motionEnabled = !motionEnabled;
+      this.classList.toggle("active", motionEnabled);
+      if (is3DMode && graph3dInstance) {{
+        graph3dInstance.controls().autoRotate = motionEnabled;
+      }} else if (motionEnabled) {{
+        network2d.startSimulation();
+      }}
+    }};
+
+    document.getElementById("btn-pulses").onclick = function() {{
+      pulsesEnabled = !pulsesEnabled;
+      this.classList.toggle("active", pulsesEnabled);
+      if (is3DMode && graph3dInstance) {{
+        graph3dInstance.linkDirectionalParticles(pulsesEnabled ? 3 : 0);
+      }}
     }};
 
     document.getElementById("btn-toggle-sidebar").onclick = function() {{
@@ -778,7 +999,8 @@ def to_interactive_html(
           const data = await resp.json();
           appendMsg(data.answer, "assistant", data.cited_nodes);
           if (data.cited_nodes && data.cited_nodes.length > 0) {{
-            network.selectNodes(data.cited_nodes);
+            if (!is3DMode) network2d.selectNodes(data.cited_nodes);
+            focusNode(data.cited_nodes[0]);
           }}
           return;
         }}
@@ -790,7 +1012,8 @@ def to_interactive_html(
       const ans = clientGraphReason(question);
       appendMsg(ans.text, "assistant", ans.cited);
       if (ans.cited && ans.cited.length > 0) {{
-        network.selectNodes(ans.cited);
+        if (!is3DMode) network2d.selectNodes(ans.cited);
+        focusNode(ans.cited[0]);
       }}
     }}
 
@@ -865,6 +1088,13 @@ def to_interactive_html(
       }};
     }}
 
+    function filterByKind(kind) {{
+      const matching = rawData.nodes.filter(n => n.kind === kind).map(n => n.id);
+      if (matching.length > 0) {{
+        focusNode(matching[0]);
+      }}
+    }}
+
     function escapeHtml(str) {{
       return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }}
@@ -884,9 +1114,7 @@ def to_pyvis_html(
     width: str = "100%",
     notebook: bool = False,
 ) -> Path:
-    """
-    Render an interactive HTML visualisation via pyvis.
-    """
+    """Render an interactive HTML visualisation via pyvis."""
     try:
         from pyvis.network import Network
     except ImportError as exc:
