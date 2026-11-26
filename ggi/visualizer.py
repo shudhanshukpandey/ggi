@@ -56,7 +56,12 @@ def to_interactive_html(
     """
     out_path = Path(output)
     graph_dict = graph.to_dict()
-    graph_json = json.dumps(graph_dict, default=str)
+    # Safely escape HTML closing tags so scanned HTML files (e.g. index.html) don't break <script>
+    graph_json = (
+        json.dumps(graph_dict, default=str)
+        .replace("</", r"<\/")
+        .replace("<!--", r"<\!--")
+    )
     proj_title = title or graph.project or "Codebase Memory Graph"
 
     html_content = f"""<!DOCTYPE html>
