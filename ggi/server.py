@@ -20,6 +20,11 @@ from ggi.serializer import load_graph
 from ggi.visualizer import to_interactive_html
 
 
+class ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def start_server(
     graph_path: str | Path,
     port: int = 8501,
@@ -37,36 +42,37 @@ def start_server(
     graph = load_graph(graph_file)
     qa = GraphQA(graph, slm_url=slm_url)
 
-    # Generate temporary or persistent interactive HTML
+    # Generate persistent interactive HTML
     html_file = graph_file.parent / f"{graph_file.stem}_interactive.html"
     to_interactive_html(graph, output=html_file)
-    html_content = html_file.read_bytes()
 
     class GGIRequestHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
-            # Suppress default noisy access logs
             return
 
         def do_GET(self) -> None:
             if self.path in ("/", "/index.html"):
+                content = html_file.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(html_content)))
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(html_content)
+                self.wfile.write(content)
                 return
 
             if self.path == "/api/graph":
                 data = json.dumps(graph.to_dict()).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Content-Length", str(len(data)))
+                self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(data)
                 return
 
             if self.path.startswith("/api/context"):
-                # Parse node_id from query params
                 query = self.path.split("?", 1)[-1] if "?" in self.path else ""
                 params = dict(qc.split("=", 1) for qc in query.split("&") if "=" in qc)
                 nid = params.get("node_id", "")
@@ -74,7 +80,9 @@ def start_server(
                 data = json.dumps(ctx).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Content-Length", str(len(data)))
+                self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(data)
                 return
@@ -94,12 +102,15 @@ def start_server(
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Connection", "close")
                     self.end_headers()
                     self.wfile.write(data)
                 except Exception as exc:
                     err = json.dumps({"error": str(exc)}).encode("utf-8")
                     self.send_response(500)
                     self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Connection", "close")
                     self.end_headers()
                     self.wfile.write(err)
                 return
@@ -111,6 +122,7 @@ def start_server(
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Connection", "close")
             self.end_headers()
 
     url = f"http://{host}:{port}/"
@@ -124,9 +136,7 @@ def start_server(
         except Exception:
             pass
 
-    # Allow port reuse
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((host, port), GGIRequestHandler) as httpd:
+    with ThreadingServer((host, port), GGIRequestHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
