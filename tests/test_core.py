@@ -248,3 +248,70 @@ class TestScanner:
         mg = scan_directory(tmp_path, max_depth=1)
         paths = [n.get("path", "") for n in mg.find_nodes()]
         assert not any("b" in p for p in paths)
+
+
+# ── Question Answering (GraphQA) & Visualizer tests ──────────────────────────
+
+
+class TestGraphQA:
+    def test_ask_implementations(self):
+        from ggi.qa import GraphQA
+
+        mg = MemoryGraph(project="qa-test")
+        f = mg.add_file(FileNode(path="server.py", id="srv"))
+        mg.record_change(ChangeRecord(
+            title="Add authentication middleware",
+            description="JWT auth tokens with refresh cycle",
+            change_type="implementation",
+            targets=["srv"],
+            author="alice",
+        ))
+
+        qa = GraphQA(mg)
+        ans = qa.ask("What was implemented?")
+        assert "authentication middleware" in ans["answer"]
+        assert "srv" in ans["cited_nodes"]
+
+    def test_ask_corrections(self):
+        from ggi.qa import GraphQA
+
+        mg = MemoryGraph(project="qa-test")
+        f = mg.add_file(FileNode(path="db.py", id="db"))
+        mg.record_change(ChangeRecord(
+            title="Fix connection leak in pool",
+            description="Connections were not released on timeout",
+            change_type="correction",
+            targets=["db"],
+            author="bob",
+        ))
+
+        qa = GraphQA(mg)
+        ans = qa.ask("What bugs were fixed?")
+        assert "Fix connection leak" in ans["answer"]
+        assert "db" in ans["cited_nodes"]
+
+    def test_ask_connections(self):
+        from ggi.qa import GraphQA
+
+        mg = MemoryGraph(project="qa-test")
+        mg.add_file(FileNode(path="frontend.js", id="fe"))
+        mg.add_file(FileNode(path="backend.py", id="be"))
+        mg.add_edge_simple("fe", "be", EdgeKind.CALLS, label="calls API")
+
+        qa = GraphQA(mg)
+        ans = qa.ask("How does frontend connect to backend?")
+        assert "calls API" in ans["answer"]
+        assert "fe" in ans["cited_nodes"]
+        assert "be" in ans["cited_nodes"]
+
+    def test_to_interactive_html(self, tmp_path):
+        from ggi.visualizer import to_interactive_html
+
+        mg = MemoryGraph(project="html-test")
+        mg.add_file(FileNode(path="index.js", id="idx"))
+        out = to_interactive_html(mg, output=tmp_path / "interactive.html")
+        assert out.exists()
+        content = out.read_text(encoding="utf-8")
+        assert "GGI Memory Graph" in content
+        assert "submitQuestion" in content
+        assert "vis-network" in content

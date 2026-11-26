@@ -175,25 +175,30 @@ def context(graph_file: str, node_id: str, depth: int, json_out: bool) -> None:
 
 @cli.command(name="export")
 @click.argument("graph_file", type=click.Path(exists=True, dir_okay=False))
-@click.option("--html", "as_html", is_flag=True, help="Interactive HTML (requires pyvis).")
+@click.option("--interactive", "as_interactive", is_flag=True, help="Self-contained interactive HTML web app with Q&A panel.")
+@click.option("--html", "as_html", is_flag=True, help="Pyvis network HTML.")
 @click.option("--mermaid", "as_mermaid", is_flag=True, help="Mermaid flowchart.")
 @click.option("--dot", "as_dot", is_flag=True, help="Graphviz DOT.")
-@click.option("-o", "--output", default=None, help="Output file (HTML/DOT).")
+@click.option("-o", "--output", default=None, help="Output file (HTML/DOT/MMD).")
 def export_cmd(
     graph_file: str,
+    as_interactive: bool,
     as_html: bool,
     as_mermaid: bool,
     as_dot: bool,
     output: str | None,
 ) -> None:
-    """Export a memory graph as HTML, Mermaid, or DOT."""
-    from ggi.visualizer import to_dot, to_mermaid, to_pyvis_html
+    """Export a memory graph as Interactive Web App, Pyvis HTML, Mermaid, or DOT."""
+    from ggi.visualizer import to_dot, to_interactive_html, to_mermaid, to_pyvis_html
 
     mg = load_graph(graph_file)
 
-    if as_html:
+    if as_interactive or (not as_html and not as_mermaid and not as_dot):
+        out = to_interactive_html(mg, output=output or f"{Path(graph_file).stem}_interactive.html")
+        console.print(f"[green]✓[/] Interactive Graph + Q&A Web App saved to [bold cyan]{out}[/]")
+    elif as_html:
         out = to_pyvis_html(mg, output=output or "memory_graph.html")
-        console.print(f"[green]✓[/] HTML saved to {out}")
+        console.print(f"[green]✓[/] Pyvis HTML saved to {out}")
     elif as_mermaid:
         mmd = to_mermaid(mg)
         if output:
@@ -208,8 +213,59 @@ def export_cmd(
             console.print(f"[green]✓[/] DOT saved to {output}")
         else:
             console.print(dot)
-    else:
-        console.print("[yellow]Specify --html, --mermaid, or --dot[/]")
+
+
+# ── ask (Q&A CLI) ────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("graph_file", type=click.Path(exists=True, dir_okay=False))
+@click.argument("question")
+@click.option("--slm-url", default=None, help="Optional Ollama/SLM endpoint, e.g. http://localhost:11434")
+@click.option("--json-out", is_flag=True, help="Output response as raw JSON.")
+def ask(graph_file: str, question: str, slm_url: str | None, json_out: bool) -> None:
+    """Ask a question about the codebase using graph intelligence."""
+    from ggi.qa import GraphQA
+
+    mg = load_graph(graph_file)
+    qa = GraphQA(mg, slm_url=slm_url)
+    res = qa.ask(question)
+
+    if json_out:
+        console.print_json(json.dumps(res, indent=2, default=str))
+        return
+
+    console.print(f"\n[bold cyan]Question:[/] {question}\n")
+    console.print(f"[bold green]Answer:[/]\n{res['answer']}\n")
+
+    if res.get("cited_nodes"):
+        console.print("[dim]Cited Graph Nodes:[/]")
+        for nid in res["cited_nodes"]:
+            ndata = mg.get_node(nid) or {}
+            label = ndata.get("path", ndata.get("title", nid))
+            console.print(f"  • [cyan]{label}[/] ([dim]{ndata.get('kind', 'node')}[/])")
+
+
+# ── ui (Interactive Server) ──────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("graph_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--port", default=8501, type=int, help="Port to serve on (default: 8501).")
+@click.option("--host", default="127.0.0.1", help="Host interface (default: 127.0.0.1).")
+@click.option("--no-open", is_flag=True, help="Do not automatically open browser.")
+@click.option("--slm-url", default=None, help="Optional Ollama/SLM URL for enhanced reasoning.")
+def ui(graph_file: str, port: int, host: str, no_open: bool, slm_url: str | None) -> None:
+    """Launch the interactive web UI and question panel in your browser."""
+    from ggi.server import start_server
+
+    start_server(
+        graph_file,
+        port=port,
+        host=host,
+        auto_open=not no_open,
+        slm_url=slm_url,
+    )
 
 
 # ── tree ─────────────────────────────────────────────────────────────────────

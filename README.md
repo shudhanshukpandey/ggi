@@ -67,7 +67,21 @@ ggi tree graph.json
 ggi context graph.json <node-id>
 ggi context graph.json <node-id> --json-out
 
-# Export as interactive HTML
+# Launch interactive Web UI + Question Panel in browser
+ggi ui graph.json
+
+# Ask questions using Graph Intelligence directly from terminal
+ggi ask graph.json "What was implemented in this project?"
+ggi ask graph.json "What bugs or errors were corrected?"
+ggi ask graph.json "How does frontend connect to backend?"
+
+# Use with a local SLM (e.g. Ollama llama3.2, phi3)
+ggi ask graph.json "Explain the architecture" --slm-url http://localhost:11434
+
+# Export as self-contained interactive web app with Q&A panel
+ggi export graph.json --interactive -o interactive_viewer.html
+
+# Export as Pyvis network HTML
 ggi export graph.json --html -o viz.html
 
 # Export as Mermaid diagram
@@ -254,6 +268,66 @@ Hand this JSON to any agent and it instantly knows:
 - What was built there and what was fixed
 - What notes/concerns exist
 - What it connects to
+
+---
+
+## Interactive Graph Explorer & Question Panel
+
+GGI includes a dedicated interactive web interface featuring:
+- **Interactive Force-directed Graph Canvas**: Drag, zoom, pan, physics toggle, kind filters (Files, Directories, Changes, Annotations, Agents).
+- **Node Details Inspector**: Click on any node to view its summary, language, full code content preview, connected implementation records, and dependencies.
+- **Embedded Question & Answer (Q&A) Panel**: Ask natural language questions about what was built, what was fixed, or how services communicate.
+- **Bi-directional Canvas Linking**: Clicking cited node pills in an answer automatically highlights and centers the camera on those nodes in the graph!
+- **Pluggable SLM / Local LLM**: Out-of-the-box zero-dependency Graph Reasoning Engine, with optional pass-through to local SLMs like Ollama (`llama3.2`, `phi3`, etc.).
+
+### Launch the Live UI Server
+
+```bash
+ggi ui graph.json
+# Or specify a port and optional SLM:
+ggi ui graph.json --port 8501 --slm-url http://localhost:11434
+```
+
+### Export as a Standalone Single-File Web App
+
+Generate an offline-capable HTML file with the full graph and built-in client-side reasoning engine:
+
+```bash
+ggi export graph.json --interactive -o interactive_viewer.html
+open interactive_viewer.html
+```
+
+---
+
+## Question Answering (GraphQA API & CLI)
+
+You can query the memory graph directly from the terminal or in Python:
+
+### CLI Question Answering
+
+```bash
+# Ask about implementations
+ggi ask graph.json "What was implemented in this project?"
+
+# Ask about bug fixes and corrections
+ggi ask graph.json "What bugs or errors were corrected?"
+
+# Ask about architecture / data flow
+ggi ask graph.json "How does React frontend talk to Django backend?"
+```
+
+### Python API Question Answering
+
+```python
+from ggi import load_graph, GraphQA
+
+graph = load_graph("memory_graph.json")
+qa = GraphQA(graph)
+
+response = qa.ask("What was implemented and what was corrected?")
+print(response["answer"])
+print("Cited Nodes:", response["cited_nodes"])
+```
 
 ---
 

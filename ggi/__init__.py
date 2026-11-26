@@ -12,6 +12,8 @@ from ggi.graph import MemoryGraph
 from ggi.models import FileNode, ChangeRecord, ContextEdge, NodeKind, EdgeKind
 from ggi.scanner import scan_directory
 from ggi.serializer import save_graph, load_graph
+from ggi.qa import GraphQA
+from ggi.visualizer import to_interactive_html, to_mermaid, to_dot, to_pyvis_html
 
 __all__ = [
     "MemoryGraph",
@@ -23,4 +25,9 @@ __all__ = [
     "scan_directory",
     "save_graph",
     "load_graph",
+    "GraphQA",
+    "to_interactive_html",
+    "to_mermaid",
+    "to_dot",
+    "to_pyvis_html",
 ]
