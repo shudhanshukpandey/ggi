@@ -219,7 +219,9 @@ flowchart TD
     f_vault -->|"annotated_by"| ann_vault
 ```
 
-> **Try this example locally:** Run `ggi ui examples/sample_memory_graph.json` to launch the interactive 2D fluid & 3D galaxy explorer on this graph!
+> **Try this example locally:**
+> - **Live Server**: Run `ggi ui examples/sample_memory_graph.json` to launch the interactive UI with live Q&A.
+> - **Self-Contained Offline HTML**: Double-click or run `open examples/sample_interactive.html` in your browser (no server, Python, or network required!).
 
 ### Node Kinds
 
