@@ -14,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ (un-ignored for bundled vendor assets)
+!lib/
 lib64/
 parts/
 sdist/

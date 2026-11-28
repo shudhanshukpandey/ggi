@@ -64,16 +64,17 @@ def to_interactive_html(
     )
     proj_title = title or graph.project or "Codebase Memory Graph"
 
-    lib_dir = Path(__file__).resolve().parent.parent / "lib" / "vis-9.1.2"
-    vis_js_file = lib_dir / "vis-network.min.js"
-    vis_css_file = lib_dir / "vis-network.css"
+    base_lib = Path(__file__).resolve().parent.parent / "lib"
+    vis_dir = base_lib / "vis-9.1.2"
+    vis_js_file = vis_dir / "vis-network.min.js"
+    vis_css_file = vis_dir / "vis-network.css"
+    three_js_file = base_lib / "three.min.js"
+    three_d_file = base_lib / "3d-force-graph.min.js"
 
-    if vis_js_file.exists():
-        vis_script = f"<script>{vis_js_file.read_text(encoding='utf-8')}</script>"
-    else:
-        vis_script = '<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>'
-
+    vis_script = f"<script>{vis_js_file.read_text(encoding='utf-8')}</script>" if vis_js_file.exists() else '<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>'
     vis_css = f"<style>{vis_css_file.read_text(encoding='utf-8')}</style>" if vis_css_file.exists() else ""
+    three_script = f"<script>{three_js_file.read_text(encoding='utf-8')}</script>" if three_js_file.exists() else '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>'
+    three_d_script = f"<script>{three_d_file.read_text(encoding='utf-8')}</script>" if three_d_file.exists() else '<script src="https://unpkg.com/3d-force-graph"></script>'
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -83,7 +84,8 @@ def to_interactive_html(
   <title>GGI — {proj_title}</title>
   {vis_css}
   {vis_script}
-  <script src="https://unpkg.com/3d-force-graph"></script>
+  {three_script}
+  {three_d_script}
   <style>
     :root {{
       --bg: #070a13;
@@ -261,12 +263,24 @@ def to_interactive_html(
       flex-direction: column;
       backdrop-filter: blur(16px);
       z-index: 20;
-      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+      position: relative;
+    }}
+    #sidebar.collapsed {{
+      width: 0 !important;
+      min-width: 0 !important;
+      max-width: 0 !important;
+      border-left: none !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      overflow: hidden !important;
+      display: none !important;
     }}
     .tabs {{
       display: flex;
       border-bottom: 1px solid var(--border);
       background: rgba(0,0,0,0.2);
+      align-items: center;
     }}
     .tab-btn {{
       flex: 1;
@@ -284,6 +298,53 @@ def to_interactive_html(
       color: var(--accent);
       border-bottom-color: var(--accent);
       background: rgba(56, 189, 248, 0.05);
+    }}
+    .btn-collapse-sidebar {{
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1rem;
+      padding: 0.6rem 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-left: 1px solid var(--border);
+      transition: color 0.2s, background 0.2s;
+    }}
+    .btn-collapse-sidebar:hover {{
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }}
+
+    .floating-sidebar-toggle {{
+      position: absolute;
+      top: 68px;
+      right: 0;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-right: none;
+      color: var(--accent);
+      padding: 0.5rem 0.85rem;
+      border-radius: 8px 0 0 8px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 0.4rem;
+      box-shadow: -4px 0 16px rgba(0,0,0,0.5);
+      z-index: 15;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(12px);
+    }}
+    .floating-sidebar-toggle:hover {{
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent);
+      color: #fff;
+    }}
+    .floating-sidebar-toggle.visible {{
+      display: flex;
     }}
 
     .tab-content {{
@@ -520,7 +581,7 @@ def to_interactive_html(
         <button id="btn-labels" class="btn active">🏷️ Clean Labels</button>
         <button id="btn-spacing" class="btn">↔️ Spacing</button>
         <button id="btn-fit" class="btn">🎯 Center</button>
-        <button id="btn-toggle-sidebar" class="btn">💬 Q&A Panel</button>
+        <button id="btn-toggle-sidebar" class="btn active">▶ Collapse Panel</button>
       </div>
     </div>
 
@@ -538,6 +599,11 @@ def to_interactive_html(
       <div class="legend-item" onclick="filterByKind('agent')"><span class="legend-color" style="background:#94a3b8;"></span> Agent</div>
       <div class="legend-item" onclick="filterByKind('annotation')"><span class="legend-color" style="background:#fde047;"></span> Annotation</div>
     </div>
+
+    <!-- Floating Expand Button when Sidebar is collapsed -->
+    <button id="floating-sidebar-toggle" class="floating-sidebar-toggle" onclick="toggleSidebar(true)" title="Expand Chat & Node Inspector">
+      💬 Chat &amp; Inspector ◀
+    </button>
   </div>
 
   <!-- Right Sidebar: Q&A & Node Inspector -->
@@ -545,6 +611,7 @@ def to_interactive_html(
     <div class="tabs">
       <button class="tab-btn active" id="tab-qa-btn" onclick="switchTab('qa')">💬 Question & Answer</button>
       <button class="tab-btn" id="tab-inspector-btn" onclick="switchTab('inspector')">🔍 Node Inspector</button>
+      <button class="btn-collapse-sidebar" id="btn-collapse-sidebar" title="Collapse Panel (Chat & Inspector)" onclick="toggleSidebar(false)">✕</button>
     </div>
 
     <!-- Q&A Tab -->
@@ -786,48 +853,240 @@ def to_interactive_html(
     requestAnimationFrame(animLoop);
 
     // ── 3D Galaxy View Implementation ─────────────────────────────────────────
+    let highlightNodes3D = new Set();
+    let highlightLinks3D = new Set();
+    let hoverNode3D = null;
+
+    function createTextSprite(text, color) {{
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const fontSize = 26;
+      ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
+      const textWidth = ctx.measureText(text).width;
+      canvas.width = Math.max(textWidth + 24, 60);
+      canvas.height = fontSize + 18;
+
+      // Draw pill background
+      ctx.fillStyle = "rgba(7, 10, 19, 0.90)";
+      ctx.strokeStyle = color || "#38bdf8";
+      ctx.lineWidth = 2.5;
+
+      const r = 8;
+      const x = 2, y = 2, w = canvas.width - 4, h = canvas.height - 4;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw text
+      ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      const spriteMat = new THREE.SpriteMaterial({{ map: texture, depthWrite: false }});
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(canvas.width / 8.5, canvas.height / 8.5, 1);
+      return sprite;
+    }}
+
     function init3DView() {{
       const container3d = document.getElementById("network-3d");
-      if (typeof ForceGraph3D === "undefined") {{
+      if (typeof ForceGraph3D === "undefined" || typeof THREE === "undefined") {{
         alert("3D library loading... please check network connection or use 2D Fluid mode.");
         return;
       }}
 
-      const gData = {{
-        nodes: rawData.nodes.map(n => ({{
+      // Pre-format nodes for 3D
+      const gNodes = rawData.nodes.map(n => {{
+        let label = n.title || n.name || n.id;
+        if (n.path) {{
+          const parts = n.path.split("/").filter(Boolean);
+          if (n.kind === "directory") {{
+            label = "📁 " + (parts[parts.length - 1] || n.id);
+          }} else if (parts.length >= 2) {{
+            label = parts.slice(-2).join("/");
+          }} else {{
+            label = parts[parts.length - 1] || n.id;
+          }}
+        }} else if (n.kind === "change") {{
+          label = (n.change_type === "correction" ? "🔧 " : "✨ ") + (n.title || n.id);
+        }} else if (n.kind === "annotation") {{
+          label = "📝 " + (n.title || n.id);
+        }}
+        const color = KIND_COLORS[n.kind] || "#94a3b8";
+        return {{
           id: n.id,
-          name: n.path ? n.path.split("/").pop() : (n.title || n.name || n.id),
-          kind: n.kind,
-          color: KIND_COLORS[n.kind] || "#94a3b8",
-          val: n.kind === "directory" ? 6 : (n.kind === "change" ? 5 : 3),
-          raw: n
-        }})),
-        links: rawData.edges.map(e => ({{
+          name: label,
+          kind: n.kind || "file",
+          color: color,
+          raw: n,
+          neighbors: [],
+          links: []
+        }};
+      }});
+
+      const nodeMap = new Map(gNodes.map(n => [n.id, n]));
+
+      const gLinks = rawData.edges.map(e => {{
+        const sourceNode = nodeMap.get(e.source);
+        const targetNode = nodeMap.get(e.target);
+        const isContainment = e.kind === "contains" || (e.label && e.label.startsWith("contains "));
+        const linkObj = {{
           source: e.source,
           target: e.target,
-          label: e.label || e.kind || "",
+          label: isContainment ? "" : (e.label || e.kind || ""),
+          isContainment: isContainment,
           raw: e
-        }}))
-      }};
+        }};
+        if (sourceNode && targetNode) {{
+          sourceNode.neighbors.push(targetNode);
+          targetNode.neighbors.push(sourceNode);
+          sourceNode.links.push(linkObj);
+          targetNode.links.push(linkObj);
+        }}
+        return linkObj;
+      }});
+
+      const initW = container3d.clientWidth || (window.innerWidth - (sidebarOpen ? 440 : 0));
+      const initH = container3d.clientHeight || (window.innerHeight - 56);
 
       graph3dInstance = ForceGraph3D()(container3d)
-        .graphData(gData)
-        .nodeLabel(n => `<b>${{n.raw.path || n.raw.title || n.id}}</b> [${{n.kind}}]`)
-        .nodeColor(n => n.color)
-        .nodeRelSize(4.5)
-        .linkDirectionalParticles(3)
-        .linkDirectionalParticleSpeed(0.006)
+        .width(initW)
+        .height(initH)
+        .backgroundColor("#020617")
+        .graphData({{ nodes: gNodes, links: gLinks }})
+        .nodeLabel(n => `<b>${{n.raw.path || n.raw.title || n.id}}</b><br><span style='color:${{n.color}}'>Kind: ${{n.kind}}</span>`)
+        .nodeThreeObject(node => {{
+          const group = new THREE.Group();
+          const baseColor = new THREE.Color(node.color);
+
+          let mesh;
+          if (node.kind === "directory") {{
+            // Planetary Sphere with glowing rings
+            const geom = new THREE.SphereGeometry(6.5, 20, 20);
+            const mat = new THREE.MeshPhongMaterial({{
+              color: baseColor,
+              emissive: baseColor,
+              emissiveIntensity: 0.35,
+              shininess: 90
+            }});
+            mesh = new THREE.Mesh(geom, mat);
+            group.add(mesh);
+
+            // Planetary Ring
+            const ringGeom = new THREE.RingGeometry(8.5, 12, 32);
+            const ringMat = new THREE.MeshBasicMaterial({{
+              color: baseColor,
+              side: THREE.DoubleSide,
+              transparent: true,
+              opacity: 0.45
+            }});
+            const ring = new THREE.Mesh(ringGeom, ringMat);
+            ring.rotation.x = Math.PI / 2.5;
+            group.add(ring);
+          }} else if (node.kind === "change") {{
+            // Ruby gem octahedron
+            const geom = new THREE.OctahedronGeometry(6.2);
+            const mat = new THREE.MeshPhongMaterial({{
+              color: baseColor,
+              emissive: baseColor,
+              emissiveIntensity: 0.45,
+              shininess: 100
+            }});
+            mesh = new THREE.Mesh(geom, mat);
+            group.add(mesh);
+          }} else if (node.kind === "agent") {{
+            // Tech cuboid
+            const geom = new THREE.BoxGeometry(6.5, 6.5, 6.5);
+            const mat = new THREE.MeshLambertMaterial({{
+              color: baseColor,
+              emissive: baseColor,
+              emissiveIntensity: 0.25
+            }});
+            mesh = new THREE.Mesh(geom, mat);
+            group.add(mesh);
+          }} else {{
+            // Luminous sphere for files
+            const geom = new THREE.SphereGeometry(4.2, 16, 16);
+            const mat = new THREE.MeshPhongMaterial({{
+              color: baseColor,
+              emissive: baseColor,
+              emissiveIntensity: 0.25,
+              shininess: 80
+            }});
+            mesh = new THREE.Mesh(geom, mat);
+            group.add(mesh);
+          }}
+
+          // Billboard 3D Label Badge
+          const sprite = createTextSprite(node.name, node.color);
+          sprite.position.y = (node.kind === "directory" ? 10 : 8);
+          group.add(sprite);
+
+          return group;
+        }})
+        .linkWidth(link => {{
+          if (highlightLinks3D.size > 0) {{
+            return highlightLinks3D.has(link) ? 3.2 : 0.4;
+          }}
+          return link.isContainment ? 0.8 : 1.6;
+        }})
+        .linkColor(link => {{
+          if (highlightLinks3D.size > 0) {{
+            return highlightLinks3D.has(link) ? "#38bdf8" : "rgba(100, 116, 139, 0.08)";
+          }}
+          const isCall = link.raw && (link.raw.kind === "calls" || (link.raw.label && link.raw.label.toLowerCase().includes("api")));
+          const isChange = link.raw && (link.raw.kind === "implements" || link.raw.kind === "corrects");
+          return isCall ? "rgba(56, 189, 248, 0.55)" : (isChange ? "rgba(244, 63, 94, 0.55)" : "rgba(148, 163, 184, 0.25)");
+        }})
+        .linkDirectionalParticles(link => {{
+          if (!pulsesEnabled) return 0;
+          if (highlightLinks3D.size > 0) {{
+            return highlightLinks3D.has(link) ? 5 : 0;
+          }}
+          return link.isContainment ? 1 : 3;
+        }})
+        .linkDirectionalParticleSpeed(0.007)
         .linkDirectionalParticleWidth(2.5)
         .linkDirectionalParticleColor(l => {{
           const isCall = l.raw && (l.raw.kind === "calls" || (l.raw.label && l.raw.label.toLowerCase().includes("api")));
           const isChange = l.raw && (l.raw.kind === "implements" || l.raw.kind === "corrects");
           return isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
         }})
-        .linkColor(() => "rgba(148, 163, 184, 0.35)")
+        .onNodeHover(node => {{
+          if ((!node && !highlightNodes3D.size) || (node && hoverNode3D === node)) return;
+          highlightNodes3D.clear();
+          highlightLinks3D.clear();
+
+          if (node) {{
+            highlightNodes3D.add(node);
+            node.neighbors.forEach(neighbor => highlightNodes3D.add(neighbor));
+            node.links.forEach(link => highlightLinks3D.add(link));
+          }}
+          hoverNode3D = node || null;
+
+          graph3dInstance
+            .linkWidth(graph3dInstance.linkWidth())
+            .linkColor(graph3dInstance.linkColor())
+            .linkDirectionalParticles(graph3dInstance.linkDirectionalParticles());
+        }})
         .onNodeClick(n => {{
-          inspectNode(n.id);
+          inspectNode(n.id, true);
           // Fly camera to node
-          const distance = 40;
+          const distance = 48;
           const distRatio = 1 + distance/Math.hypot(n.x, n.y, n.z);
           graph3dInstance.cameraPosition(
             {{ x: n.x * distRatio, y: n.y * distRatio, z: n.z * distRatio }},
@@ -836,9 +1095,36 @@ def to_interactive_html(
           );
         }});
 
+      // Add Cosmic Starfield to 3D Scene
+      const scene = graph3dInstance.scene();
+      const starCount = 1800;
+      const starGeom = new THREE.BufferGeometry();
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount * 3; i += 3) {{
+        starPos[i] = (Math.random() - 0.5) * 3000;
+        starPos[i+1] = (Math.random() - 0.5) * 3000;
+        starPos[i+2] = (Math.random() - 0.5) * 3000;
+      }}
+      starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({{
+        color: 0x93c5fd,
+        size: 1.8,
+        transparent: true,
+        opacity: 0.65
+      }});
+      const starField = new THREE.Points(starGeom, starMat);
+      scene.add(starField);
+
+      // Add ambient and directional lights for specular reflections
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+      scene.add(ambientLight);
+      const sunLight = new THREE.DirectionalLight(0xbae6fd, 1.2);
+      sunLight.position.set(150, 250, 200);
+      scene.add(sunLight);
+
       // Auto-orbiting camera movement
       graph3dInstance.controls().autoRotate = true;
-      graph3dInstance.controls().autoRotateSpeed = 0.8;
+      graph3dInstance.controls().autoRotateSpeed = 0.6;
     }}
 
     // Toggle 2D / 3D Mode
@@ -852,10 +1138,15 @@ def to_interactive_html(
         this.classList.add("active");
         c2d.style.display = "none";
         c3d.style.display = "block";
-        if (!graph3dInstance) init3DView();
+        if (!graph3dInstance) {{
+          init3DView();
+        }} else {{
+          graph3dInstance.resumeAnimation();
+        }}
       }} else {{
         this.textContent = "🌌 3D Galaxy";
         this.classList.remove("active");
+        if (graph3dInstance) graph3dInstance.pauseAnimation();
         c3d.style.display = "none";
         c2d.style.display = "block";
         network2d.fit();
@@ -867,7 +1158,7 @@ def to_interactive_html(
       if (params.nodes.length > 0) {{
         const nodeId = params.nodes[0];
         highlightNeighborhood(nodeId);
-        inspectNode(nodeId);
+        inspectNode(nodeId, true);
       }} else {{
         resetHighlight();
       }}
@@ -905,11 +1196,14 @@ def to_interactive_html(
     }}
 
     // Inspector Rendering
-    function inspectNode(nodeId) {{
+    function inspectNode(nodeId, shouldSwitchTab = false) {{
       const n = nodes.get(nodeId) || (rawData.nodes.find(x => x.id === nodeId));
       if (!n) return;
       const raw = n.raw || n;
-      switchTab('inspector');
+      if (shouldSwitchTab) {{
+        switchTab('inspector');
+        if (!sidebarOpen) toggleSidebar(true);
+      }}
 
       const incomingEdges = edges.get({{ filter: e => e.to === nodeId }});
       const outgoingEdges = edges.get({{ filter: e => e.from === nodeId }});
@@ -942,8 +1236,8 @@ def to_interactive_html(
         <div>
           <div class="section-title">Relationships (${{incomingEdges.length + outgoingEdges.length}})</div>
           <div style="font-size:0.82rem; color:#94a3b8; display:flex; flex-direction:column; gap:0.3rem;">
-            ${{incomingEdges.map(e => `<div>← <i>${{e.label}}</i> from <a href="javascript:focusNode('${{e.from}}')" style="color:#38bdf8;">${{getNodeName(e.from)}}</a></div>`).join('')}}
-            ${{outgoingEdges.map(e => `<div>→ <i>${{e.label}}</i> to <a href="javascript:focusNode('${{e.to}}')" style="color:#38bdf8;">${{getNodeName(e.to)}}</a></div>`).join('')}}
+            ${{incomingEdges.map(e => `<div>← <i>${{e.label}}</i> from <a href="javascript:focusNode('${{e.from}}', false)" style="color:#38bdf8;">${{getNodeName(e.from)}}</a></div>`).join('')}}
+            ${{outgoingEdges.map(e => `<div>→ <i>${{e.label}}</i> to <a href="javascript:focusNode('${{e.to}}', false)" style="color:#38bdf8;">${{getNodeName(e.to)}}</a></div>`).join('')}}
           </div>
         </div>
 
@@ -960,12 +1254,12 @@ def to_interactive_html(
       return n ? ((n.raw ? n.raw.path : n.path) || (n.raw ? n.raw.title : n.title) || id) : id;
     }}
 
-    function focusNode(nodeId) {{
+    function focusNode(nodeId, shouldSwitchTab = false) {{
       if (is3DMode && graph3dInstance) {{
         const gData = graph3dInstance.graphData();
         const n3d = gData.nodes.find(n => n.id === nodeId);
         if (n3d) {{
-          const distance = 40;
+          const distance = 48;
           const distRatio = 1 + distance/Math.hypot(n3d.x, n3d.y, n3d.z);
           graph3dInstance.cameraPosition(
             {{ x: n3d.x * distRatio, y: n3d.y * distRatio, z: n3d.z * distRatio }},
@@ -978,7 +1272,7 @@ def to_interactive_html(
         network2d.selectNodes([nodeId]);
         highlightNeighborhood(nodeId);
       }}
-      inspectNode(nodeId);
+      inspectNode(nodeId, shouldSwitchTab);
     }}
 
     // Tab switcher
@@ -1075,9 +1369,49 @@ def to_interactive_html(
       network2d.startSimulation();
     }};
 
-    document.getElementById("btn-toggle-sidebar").onclick = function() {{
+    let sidebarOpen = true;
+
+    function toggleSidebar(forceState) {{
+      if (typeof forceState === "boolean") {{
+        sidebarOpen = forceState;
+      }} else {{
+        sidebarOpen = !sidebarOpen;
+      }}
+
       const sb = document.getElementById("sidebar");
-      sb.style.display = sb.style.display === "none" ? "flex" : "none";
+      const navBtn = document.getElementById("btn-toggle-sidebar");
+      const floatBtn = document.getElementById("floating-sidebar-toggle");
+
+      if (sidebarOpen) {{
+        sb.classList.remove("collapsed");
+        if (navBtn) {{
+          navBtn.classList.add("active");
+          navBtn.textContent = "▶ Collapse Panel";
+        }}
+        if (floatBtn) floatBtn.classList.remove("visible");
+      }} else {{
+        sb.classList.add("collapsed");
+        if (navBtn) {{
+          navBtn.classList.remove("active");
+          navBtn.textContent = "◀ Open Panel";
+        }}
+        if (floatBtn) floatBtn.classList.add("visible");
+      }}
+
+      setTimeout(() => {{
+        if (is3DMode && graph3dInstance) {{
+          const c3d = document.getElementById("network-3d");
+          const w = c3d.clientWidth || (window.innerWidth - (sidebarOpen ? 440 : 0));
+          const h = c3d.clientHeight || (window.innerHeight - 56);
+          graph3dInstance.width(w).height(h);
+        }} else if (network2d) {{
+          network2d.redraw();
+        }}
+      }}, 320);
+    }}
+
+    document.getElementById("btn-toggle-sidebar").onclick = function() {{
+      toggleSidebar();
     }};
 
     // Search bar
@@ -1085,20 +1419,28 @@ def to_interactive_html(
       const val = e.target.value.toLowerCase().trim();
       if (!val) return;
       const match = rawData.nodes.find(n => (n.path && n.path.toLowerCase().includes(val)) || (n.title && n.title.toLowerCase().includes(val)));
-      if (match) focusNode(match.id);
+      if (match) focusNode(match.id, false);
     }});
 
-    // Deep link permalink support (e.g. #auth/models.py or #social_platform/auth/models.py)
+    // Deep link permalink support (e.g. #3d, #collapsed, #auth/models.py)
     function checkUrlHash() {{
       if (window.location.hash) {{
         const targetId = decodeURIComponent(window.location.hash.substring(1)).toLowerCase();
+        if (targetId === "3d" || targetId === "galaxy") {{
+          if (!is3DMode) document.getElementById("btn-view-mode").click();
+          return;
+        }}
+        if (targetId === "collapsed" || targetId === "fullscreen") {{
+          toggleSidebar(false);
+          return;
+        }}
         const found = rawData.nodes.find(n => 
           n.id === targetId || 
           (n.path && (n.path.toLowerCase() === targetId || targetId.endsWith(n.path.toLowerCase()) || n.path.toLowerCase().endsWith(targetId))) ||
           (n.title && n.title.toLowerCase().includes(targetId))
         );
         if (found) {{
-          setTimeout(() => focusNode(found.id), 200);
+          setTimeout(() => focusNode(found.id, false), 200);
         }}
       }}
     }}
@@ -1126,6 +1468,7 @@ def to_interactive_html(
     function askAboutNode(nodeId) {{
       const name = getNodeName(nodeId);
       switchTab('qa');
+      if (!sidebarOpen) toggleSidebar(true);
       askQuestion(`What is the context and role of ${{name}}?`);
     }}
 
@@ -1145,7 +1488,8 @@ def to_interactive_html(
           const badge = document.createElement("span");
           badge.className = "cited-badge";
           badge.textContent = getNodeName(nid);
-          badge.onclick = () => focusNode(nid);
+          badge.title = "Click to locate on graph (stays in chat)";
+          badge.onclick = () => focusNode(nid, false);
           citeBox.appendChild(badge);
         }});
         div.appendChild(citeBox);
@@ -1171,7 +1515,7 @@ def to_interactive_html(
           appendMsg(data.answer, "assistant", data.cited_nodes);
           if (data.cited_nodes && data.cited_nodes.length > 0) {{
             if (!is3DMode) network2d.selectNodes(data.cited_nodes);
-            focusNode(data.cited_nodes[0]);
+            focusNode(data.cited_nodes[0], false);
           }}
           return;
         }}
@@ -1184,7 +1528,7 @@ def to_interactive_html(
       appendMsg(ans.text, "assistant", ans.cited);
       if (ans.cited && ans.cited.length > 0) {{
         if (!is3DMode) network2d.selectNodes(ans.cited);
-        focusNode(ans.cited[0]);
+        focusNode(ans.cited[0], false);
       }}
     }}
 
