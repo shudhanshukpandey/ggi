@@ -23,22 +23,26 @@ GGI solves this by creating a **memory graph**: a directed graph where every fil
 
 ## Installation
 
+### Option 1: Install Directly from GitHub
+
 ```bash
-pip install ggi
+pip install "git+https://github.com/shudhanshukpandey/ggi.git"
 ```
 
-For interactive HTML visualisation:
+### Option 2: Clone and Install Locally
 
 ```bash
-pip install ggi[viz]
-```
-
-For development (from source):
-
-```bash
-git clone https://github.com/shudhanshu/ggi.git
+git clone https://github.com/shudhanshukpandey/ggi.git
 cd ggi
-pip install -e ".[dev,viz]"
+pip install -e .
+```
+
+### Option 3: Run Without Installation
+
+You can also run GGI directly from the cloned repository using Python:
+
+```bash
+python3 -m ggi.cli --help
 ```
 
 ---
@@ -466,7 +470,7 @@ LICENSE                  # MIT
 | Annotations | Built-in | ✗ |
 | Auto-scanning | Yes, with language detection | Varies |
 | Export formats | JSON, YAML, HTML, Mermaid, DOT | Varies |
-| Installable CLI | `pip install ggi` | Varies |
+| Installable CLI | Yes (`ggi` command) | Varies |
 | Extensible node/edge types | Enum-based, easy to extend | Varies |
 
 GGI is inspired by graph-based knowledge tools but purpose-built for **codebase memory** and **agent hand-off**.
@@ -476,9 +480,9 @@ GGI is inspired by graph-based knowledge tools but purpose-built for **codebase 
 ## Contributing
 
 ```bash
-git clone https://github.com/shudhanshu/ggi.git
+git clone https://github.com/shudhanshukpandey/ggi.git
 cd ggi
-pip install -e ".[dev,viz]"
+pip install -e .
 pytest
 ```
 
