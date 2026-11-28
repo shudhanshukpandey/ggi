@@ -744,7 +744,7 @@ def to_interactive_html(
           background: "rgba(10, 15, 26, 0.85)",
           align: "middle"
         }},
-        smooth: {{ type: "continuous" }},
+        smooth: false,
         raw: e
       }}))
     );
@@ -758,7 +758,8 @@ def to_interactive_html(
       }},
       edges: {{
         width: 1.5,
-        shadow: true
+        shadow: true,
+        smooth: false
       }},
       physics: {{
         solver: "forceAtlas2Based",
@@ -800,7 +801,7 @@ def to_interactive_html(
       }}
     }}, 250);
 
-    // Animated glowing edge pulses on 2D canvas
+    // Animated glowing edge pulses on 2D canvas (locks precisely onto straight edge path)
     network2d.on("afterDrawing", function(ctx) {{
       if (!pulsesEnabled || is3DMode) return;
       const now = performance.now() * 0.001;
@@ -813,32 +814,46 @@ def to_interactive_html(
         const v = positions[edge.to];
         if (!u || !v) return;
 
-        const speed = 0.5;
-        const offset = (idx * 0.23) % 1;
-        const t = (now * speed + offset) % 1;
+        const dx = v.x - u.x;
+        const dy = v.y - u.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 32) return;
 
-        const px = u.x + (v.x - u.x) * t;
-        const py = u.y + (v.y - u.y) * t;
+        const nodeFrom = nodes.get(edge.from);
+        const nodeTo = nodes.get(edge.to);
+        const rFrom = nodeFrom ? (nodeFrom.size || 16) : 16;
+        const rTo = nodeTo ? (nodeTo.size || 16) : 16;
+
+        // Clip parameter t to travel precisely between outer node perimeters
+        const tMin = Math.min((rFrom + 2) / dist, 0.4);
+        const tMax = Math.max(1 - (rTo + 8) / dist, 0.6);
+
+        const speed = 0.42;
+        const offset = (idx * 0.19) % 1;
+        const rawT = (now * speed + offset) % 1;
+        const t = tMin + rawT * (tMax - tMin);
+
+        const px = u.x + dx * t;
+        const py = u.y + dy * t;
 
         const isCall = edge.raw && (edge.raw.kind === "calls" || (edge.raw.label && edge.raw.label.toLowerCase().includes("api")));
         const isChange = edge.raw && (edge.raw.kind === "implements" || edge.raw.kind === "corrects");
         const pulseColor = isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
 
+        // Outer glow
         ctx.beginPath();
-        ctx.arc(px, py, 3.8, 0, 2 * Math.PI);
+        ctx.arc(px, py, 3.6, 0, 2 * Math.PI);
         ctx.fillStyle = pulseColor;
         ctx.shadowColor = pulseColor;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 8;
         ctx.fill();
 
-        const t2 = (t + 0.5) % 1;
-        const px2 = u.x + (v.x - u.x) * t2;
-        const py2 = u.y + (v.y - u.y) * t2;
+        // Inner bright core
         ctx.beginPath();
-        ctx.arc(px2, py2, 2.2, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-        ctx.shadowColor = pulseColor;
-        ctx.shadowBlur = 6;
+        ctx.arc(px, py, 1.8, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 4;
         ctx.fill();
       }});
       ctx.restore();
