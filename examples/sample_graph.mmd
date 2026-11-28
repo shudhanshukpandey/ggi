@@ -1,0 +1,34 @@
+flowchart TD
+    dir_src["src 📁"]
+    dir_auth["src/auth 📁"]
+    dir_api["src/api 📁"]
+    dir_db["src/db 📁"]
+    77807b2f9704["src/app.py"]
+    971f439de7a9["src/auth/service.py"]
+    3a9220808038["src/auth/models.py"]
+    8fae9656bb59["src/api/routes.py"]
+    ce3771b5d876["src/db/vault.py"]
+    22494dfd0683("Add JWT Refresh Token Rotation 🔧")
+    agent_alice["agent:alice 🤖"]
+    46fec24e6358("Fix Connection Leak in Vault Pool 🔧")
+    agent_bob["agent:bob 🤖"]
+    agent_security["🛡️ Security Auditor Agent 🤖"]
+    ann_839e0145["ann:839e0145"]
+    dir_src -->|"contains"| dir_auth
+    dir_src -->|"contains"| dir_api
+    dir_src -->|"contains"| dir_db
+    dir_src -->|"contains"| 77807b2f9704
+    dir_auth -->|"contains"| 971f439de7a9
+    dir_auth -->|"contains"| 3a9220808038
+    dir_api -->|"contains"| 8fae9656bb59
+    dir_db -->|"contains"| ce3771b5d876
+    77807b2f9704 -->|"mounts routes"| 8fae9656bb59
+    971f439de7a9 -->|"queries model"| 3a9220808038
+    971f439de7a9 -->|"fetches DB secret"| ce3771b5d876
+    8fae9656bb59 -->|"validates token"| 971f439de7a9
+    ce3771b5d876 -->|"annotation"| ann_839e0145
+    22494dfd0683 -->|"Add JWT Refresh Token Rotation"| 971f439de7a9
+    22494dfd0683 -->|"by alice"| agent_alice
+    46fec24e6358 -->|"Fix Connection Leak in Vault Pool"| ce3771b5d876
+    46fec24e6358 -->|"by bob"| agent_bob
+    agent_security -->|"verified_by"| 22494dfd0683

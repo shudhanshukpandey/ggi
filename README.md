@@ -170,28 +170,56 @@ save_graph(graph, "memory_graph.yaml", fmt="yaml")
 
 ## Graph Structure
 
+### Live Example Memory Graph
+
+GitHub natively renders the diagram below. It illustrates a complete codebase memory graph representing a cloud application with directories, source files, cross-file imports/calls, implementation records, bug fix records, annotations, and security agents:
+
+```mermaid
+flowchart TD
+    classDef dir fill:#1e293b,stroke:#4ade80,stroke-width:2px,color:#f1f5f9;
+    classDef file fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f1f5f9;
+    classDef change fill:#1e1b4b,stroke:#a855f7,stroke-width:2px,color:#f1f5f9;
+    classDef fix fill:#450a0a,stroke:#f43f5e,stroke-width:2px,color:#f1f5f9;
+    classDef agent fill:#042f2e,stroke:#14b8a6,stroke-width:2px,color:#f1f5f9;
+    classDef note fill:#1c1917,stroke:#fbbf24,stroke-width:1px,color:#fde68a,stroke-dasharray: 4 2;
+
+    dir_src["📁 src"]:::dir
+    dir_auth["📁 src/auth"]:::dir
+    dir_api["📁 src/api"]:::dir
+    dir_db["📁 src/db"]:::dir
+
+    f_app["📄 src/app.py"]:::file
+    f_auth["📄 src/auth/service.py"]:::file
+    f_models["📄 src/auth/models.py"]:::file
+    f_routes["📄 src/api/routes.py"]:::file
+    f_vault["📄 src/db/vault.py"]:::file
+
+    c_jwt(["✨ Implementation: Add JWT Token Rotation"]):::change
+    c_leak(["🔧 Correction: Fix Connection Leak in Vault"]):::fix
+    agent_sec["🛡️ Agent: Security Auditor"]:::agent
+    ann_vault[/"📝 Note: Connection pool timeout set to 15s"/]:::note
+
+    dir_src -->|"contains"| dir_auth
+    dir_src -->|"contains"| dir_api
+    dir_src -->|"contains"| dir_db
+    dir_src -->|"contains"| f_app
+    dir_auth -->|"contains"| f_auth
+    dir_auth -->|"contains"| f_models
+    dir_api -->|"contains"| f_routes
+    dir_db -->|"contains"| f_vault
+
+    f_app -->|"mounts routes"| f_routes
+    f_routes -->|"validates token"| f_auth
+    f_auth -->|"queries model"| f_models
+    f_auth -->|"fetches DB secret"| f_vault
+
+    c_jwt -->|"implements"| f_auth
+    c_leak -->|"corrects"| f_vault
+    agent_sec -->|"verified_by"| c_jwt
+    f_vault -->|"annotated_by"| ann_vault
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        MEMORY GRAPH                          │
-│                                                              │
-│  ┌─────────┐  contains   ┌──────────┐  imports  ┌────────┐  │
-│  │Directory │───────────▶│  File A  │─────────▶│ File B │  │
-│  └─────────┘             └──────────┘           └────────┘  │
-│                               ▲                     ▲        │
-│                   implements  │         corrects     │        │
-│                           ┌───┴────┐           ┌────┴───┐    │
-│                           │Change 1│           │Change 2│    │
-│                           └───┬────┘           └────┬───┘    │
-│                   authored_by │         authored_by  │        │
-│                           ┌───▼────┐           ┌────▼───┐    │
-│                           │  Alice │           │  Bob   │    │
-│                           └────────┘           └────────┘    │
-│                                                              │
-│  ┌──────────┐  annotated_by  ┌────────────┐                 │
-│  │  File A  │──────────────▶│ Annotation │                  │
-│  └──────────┘                └────────────┘                  │
-└──────────────────────────────────────────────────────────────┘
-```
+
+> **Try this example locally:** Run `ggi ui examples/sample_memory_graph.json` to launch the interactive 2D fluid & 3D galaxy explorer on this graph!
 
 ### Node Kinds
 

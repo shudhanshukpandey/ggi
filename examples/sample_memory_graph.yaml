@@ -1,0 +1,222 @@
+project: Modern Cloud App
+description: Full-stack web application with authentication, API gateway, database
+  vault, and real-time messaging.
+metadata: {}
+created_at: '2026-11-28T12:42:09.206965+00:00'
+nodes:
+- id: dir_src
+  kind: directory
+  path: src
+  title: 📁 src
+- id: dir_auth
+  kind: directory
+  path: src/auth
+  title: 📁 src/auth
+- id: dir_api
+  kind: directory
+  path: src/api
+  title: 📁 src/api
+- id: dir_db
+  kind: directory
+  path: src/db
+  title: 📁 src/db
+- id: 77807b2f9704
+  path: src/app.py
+  kind: file
+  language: python
+  summary: Application entrypoint and FastAPI router setup
+  context: 'from fastapi import FastAPI
+
+    app = FastAPI(title="Cloud API")'
+  metadata: {}
+  content_hash: null
+  created_at: '2026-11-28T12:42:09.207320+00:00'
+  updated_at: '2026-11-28T12:42:09.207323+00:00'
+- id: 971f439de7a9
+  path: src/auth/service.py
+  kind: file
+  language: python
+  summary: JWT token issue, rotation and password hashing
+  context: "def authenticate_user(username, password):\n    ..."
+  metadata: {}
+  content_hash: null
+  created_at: '2026-11-28T12:42:09.207334+00:00'
+  updated_at: '2026-11-28T12:42:09.207335+00:00'
+- id: 3a9220808038
+  path: src/auth/models.py
+  kind: file
+  language: python
+  summary: User and Role SQLAlchemy models
+  context: "class User(Base):\n    id = Column(Integer, primary_key=True)"
+  metadata: {}
+  content_hash: null
+  created_at: '2026-11-28T12:42:09.207342+00:00'
+  updated_at: '2026-11-28T12:42:09.207344+00:00'
+- id: 8fae9656bb59
+  path: src/api/routes.py
+  kind: file
+  language: python
+  summary: Public REST API endpoints for user resources
+  context: '@router.get("/users/me")
+
+    def get_current_user(...):'
+  metadata: {}
+  content_hash: null
+  created_at: '2026-11-28T12:42:09.207349+00:00'
+  updated_at: '2026-11-28T12:42:09.207350+00:00'
+- id: ce3771b5d876
+  path: src/db/vault.py
+  kind: file
+  language: python
+  summary: Secure credentials and encrypted connection pool
+  context: "class DatabaseVault:\n    def get_connection(self): ..."
+  metadata: {}
+  content_hash: null
+  created_at: '2026-11-28T12:42:09.207355+00:00'
+  updated_at: '2026-11-28T12:42:09.207356+00:00'
+- id: 22494dfd0683
+  kind: change
+  title: Add JWT Refresh Token Rotation
+  description: Implemented automated rotation of refresh tokens to prevent replay
+    attacks.
+  change_type: implementation
+  targets:
+  - 971f439de7a9
+  diff_summary: ''
+  author: alice
+  timestamp: '2026-11-28T12:42:09.207381+00:00'
+  metadata: {}
+- id: agent:alice
+  kind: agent
+  name: alice
+- id: 46fec24e6358
+  kind: change
+  title: Fix Connection Leak in Vault Pool
+  description: Ensured DB connections are released on transaction abort or timeout.
+  change_type: correction
+  targets:
+  - ce3771b5d876
+  diff_summary: ''
+  author: bob
+  timestamp: '2026-11-28T12:42:09.207397+00:00'
+  metadata: {}
+- id: agent:bob
+  kind: agent
+  name: bob
+- id: agent_security
+  kind: agent
+  title: 🛡️ Security Auditor Agent
+- id: ann:839e0145
+  kind: annotation
+  text: Connection pool timeout set to 15s to mitigate zombie connections.
+  author: ''
+  created_at: '2026-11-28T12:42:09.207413+00:00'
+edges:
+- source: dir_src
+  target: dir_auth
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_src
+  target: dir_api
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_src
+  target: dir_db
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_src
+  target: 77807b2f9704
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_auth
+  target: 971f439de7a9
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_auth
+  target: 3a9220808038
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_api
+  target: 8fae9656bb59
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: dir_db
+  target: ce3771b5d876
+  kind: contains
+  label: contains
+  weight: 1.0
+  metadata: {}
+- source: 77807b2f9704
+  target: 8fae9656bb59
+  kind: imports
+  label: mounts routes
+  weight: 1.0
+  metadata: {}
+- source: 971f439de7a9
+  target: 3a9220808038
+  kind: imports
+  label: queries model
+  weight: 1.0
+  metadata: {}
+- source: 971f439de7a9
+  target: ce3771b5d876
+  kind: calls
+  label: fetches DB secret
+  weight: 1.0
+  metadata: {}
+- source: 8fae9656bb59
+  target: 971f439de7a9
+  kind: calls
+  label: validates token
+  weight: 1.0
+  metadata: {}
+- source: ce3771b5d876
+  target: ann:839e0145
+  kind: annotated_by
+  label: annotation
+  weight: 1.0
+  metadata: {}
+- source: 22494dfd0683
+  target: 971f439de7a9
+  kind: implements
+  label: Add JWT Refresh Token Rotation
+  weight: 1.0
+  metadata: {}
+- source: 22494dfd0683
+  target: agent:alice
+  kind: authored_by
+  label: by alice
+  weight: 1.0
+  metadata: {}
+- source: 46fec24e6358
+  target: ce3771b5d876
+  kind: corrects
+  label: Fix Connection Leak in Vault Pool
+  weight: 1.0
+  metadata: {}
+- source: 46fec24e6358
+  target: agent:bob
+  kind: authored_by
+  label: by bob
+  weight: 1.0
+  metadata: {}
+- source: agent_security
+  target: 22494dfd0683
+  kind: related_to
+  label: verified_by
+  weight: 1.0
+  metadata: {}
