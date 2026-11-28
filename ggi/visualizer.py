@@ -64,13 +64,25 @@ def to_interactive_html(
     )
     proj_title = title or graph.project or "Codebase Memory Graph"
 
+    lib_dir = Path(__file__).resolve().parent.parent / "lib" / "vis-9.1.2"
+    vis_js_file = lib_dir / "vis-network.min.js"
+    vis_css_file = lib_dir / "vis-network.css"
+
+    if vis_js_file.exists():
+        vis_script = f"<script>{vis_js_file.read_text(encoding='utf-8')}</script>"
+    else:
+        vis_script = '<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>'
+
+    vis_css = f"<style>{vis_css_file.read_text(encoding='utf-8')}</style>" if vis_css_file.exists() else ""
+
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GGI — {proj_title}</title>
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  {vis_css}
+  {vis_script}
   <script src="https://unpkg.com/3d-force-graph"></script>
   <style>
     :root {{
@@ -505,6 +517,8 @@ def to_interactive_html(
         <button id="btn-view-mode" class="btn">🌌 3D Galaxy</button>
         <button id="btn-motion" class="btn active">🌊 Float Motion</button>
         <button id="btn-pulses" class="btn active">✨ Flow Pulses</button>
+        <button id="btn-labels" class="btn active">🏷️ Clean Labels</button>
+        <button id="btn-spacing" class="btn">↔️ Spacing</button>
         <button id="btn-fit" class="btn">🎯 Center</button>
         <button id="btn-toggle-sidebar" class="btn">💬 Q&A Panel</button>
       </div>
@@ -590,44 +604,85 @@ def to_interactive_html(
       annotation: "ellipse"
     }};
 
-    // Format nodes for 2D vis.js
+    // Format nodes for 2D vis.js with readable, non-overlapping names
     const nodes = new vis.DataSet(
       rawData.nodes.map(n => {{
-        const label = n.path ? n.path.split("/").pop() : (n.title || n.name || n.id);
+        let label = n.title || n.name || n.id;
+        if (n.path) {{
+          const parts = n.path.split("/").filter(Boolean);
+          if (n.kind === "directory") {{
+            label = "📁 " + (parts[parts.length - 1] || n.id);
+          }} else if (parts.length >= 2) {{
+            label = parts.slice(-2).join("/");
+          }} else {{
+            label = parts[parts.length - 1] || n.id;
+          }}
+        }} else if (n.kind === "change") {{
+          const prefix = n.change_type === "correction" ? "🔧 " : "✨ ";
+          label = prefix + (n.title || n.id);
+        }}
         const kind = n.kind || "file";
         const isChange = kind === "change";
+        const baseColor = KIND_COLORS[kind] || "#94a3b8";
+
         return {{
           id: n.id,
           label: label,
           title: `<b>${{n.path || n.title || n.id}}</b><br>Kind: ${{kind}}`,
           color: {{
-            background: KIND_COLORS[kind] || "#94a3b8",
+            background: baseColor,
             border: "#ffffff",
-            highlight: {{ background: "#ffffff", border: KIND_COLORS[kind] || "#38bdf8" }}
+            highlight: {{ background: "#ffffff", border: baseColor }}
           }},
           shape: KIND_SHAPES[kind] || "dot",
-          size: kind === "directory" ? 22 : (isChange ? 18 : 14),
-          font: {{ color: "#f1f5f9", size: 12, strokeWidth: 2, strokeColor: "#090d16" }},
-          raw: n
+          size: kind === "directory" ? 26 : (isChange ? 20 : 16),
+          font: {{
+            color: "#ffffff",
+            size: kind === "directory" ? 17 : (isChange ? 14 : 14),
+            face: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            strokeWidth: 0,
+            background: "rgba(10, 15, 26, 0.9)",
+            vadjust: 2
+          }},
+          raw: n,
+          baseColor: baseColor
         }};
       }})
     );
+
+    // Filter out redundant "contains" label clutter by default
+    let edgeLabelMode = "clean"; // "clean" (semantic only) | "all" | "none"
+
+    function getEdgeDisplayLabel(e) {{
+      const isContainment = e.kind === "contains" || (e.label && e.label.startsWith("contains "));
+      if (edgeLabelMode === "clean") {{
+        return isContainment ? "" : (e.label || e.kind || "");
+      }}
+      if (edgeLabelMode === "none") return "";
+      return e.label || e.kind || "";
+    }}
 
     const edges = new vis.DataSet(
       rawData.edges.map(e => ({{
         id: `${{e.source}}->${{e.target}}`,
         from: e.source,
         to: e.target,
-        label: e.label || e.kind || "",
+        label: getEdgeDisplayLabel(e),
         arrows: "to",
-        color: {{ color: "rgba(148, 163, 184, 0.4)", highlight: "#38bdf8" }},
-        font: {{ color: "#94a3b8", size: 10, strokeWidth: 1, strokeColor: "#090d16" }},
+        color: {{ color: "rgba(148, 163, 184, 0.35)", highlight: "#38bdf8" }},
+        font: {{
+          color: "#94a3b8",
+          size: 11,
+          strokeWidth: 0,
+          background: "rgba(10, 15, 26, 0.85)",
+          align: "middle"
+        }},
         smooth: {{ type: "continuous" }},
         raw: e
       }}))
     );
 
-    // Initialise 2D Network
+    // Initialise 2D Network with wide, overlap-free physics
     const container2d = document.getElementById("network");
     const options2d = {{
       nodes: {{
@@ -641,18 +696,18 @@ def to_interactive_html(
       physics: {{
         solver: "forceAtlas2Based",
         forceAtlas2Based: {{
-          gravitationalConstant: -45,
-          centralGravity: 0.012,
-          springLength: 95,
-          springConstant: 0.08,
-          damping: 0.18,
-          avoidOverlap: 0.25
+          gravitationalConstant: -180,
+          centralGravity: 0.005,
+          springLength: 220,
+          springConstant: 0.05,
+          damping: 0.28,
+          avoidOverlap: 1.0
         }},
-        maxVelocity: 18,
-        minVelocity: 0.02,
+        maxVelocity: 30,
+        minVelocity: 0.05,
         stabilization: {{
           enabled: true,
-          iterations: 35,
+          iterations: 60,
           updateInterval: 10
         }}
       }},
@@ -807,13 +862,47 @@ def to_interactive_html(
       }}
     }};
 
-    // 2D Node click handler
+    // 2D Node click & background click handler (with neighborhood focus)
     network2d.on("click", function(params) {{
       if (params.nodes.length > 0) {{
         const nodeId = params.nodes[0];
+        highlightNeighborhood(nodeId);
         inspectNode(nodeId);
+      }} else {{
+        resetHighlight();
       }}
     }});
+
+    function highlightNeighborhood(selectedId) {{
+      const connectedNodes = new Set(network2d.getConnectedNodes(selectedId));
+      connectedNodes.add(selectedId);
+      const connectedEdges = new Set(network2d.getConnectedEdges(selectedId));
+
+      nodes.forEach(n => {{
+        if (connectedNodes.has(n.id)) {{
+          nodes.update({{ id: n.id, color: {{ background: n.baseColor, border: "#ffffff" }}, opacity: 1 }});
+        }} else {{
+          nodes.update({{ id: n.id, color: {{ background: "rgba(100, 116, 139, 0.22)", border: "rgba(255,255,255,0.08)" }}, opacity: 0.22 }});
+        }}
+      }});
+
+      edges.forEach(e => {{
+        if (connectedEdges.has(e.id)) {{
+          edges.update({{ id: e.id, color: {{ color: "#38bdf8", opacity: 1 }}, width: 2.2 }});
+        }} else {{
+          edges.update({{ id: e.id, color: {{ color: "rgba(100, 116, 139, 0.08)", opacity: 0.08 }}, width: 1 }});
+        }}
+      }});
+    }}
+
+    function resetHighlight() {{
+      nodes.forEach(n => {{
+        nodes.update({{ id: n.id, color: {{ background: n.baseColor, border: "#ffffff" }}, opacity: 1 }});
+      }});
+      edges.forEach(e => {{
+        edges.update({{ id: e.id, color: {{ color: "rgba(148, 163, 184, 0.35)", highlight: "#38bdf8" }}, width: 1.5 }});
+      }});
+    }}
 
     // Inspector Rendering
     function inspectNode(nodeId) {{
@@ -885,8 +974,9 @@ def to_interactive_html(
           );
         }}
       }} else {{
-        network2d.focus(nodeId, {{ scale: 1.2, animation: {{ duration: 600, easingFunction: "easeInOutQuad" }} }});
+        network2d.focus(nodeId, {{ scale: 1.2, animation: {{ duration: 300, easingFunction: "easeInOutQuad" }} }});
         network2d.selectNodes([nodeId]);
+        highlightNeighborhood(nodeId);
       }}
       inspectNode(nodeId);
     }}
@@ -926,6 +1016,65 @@ def to_interactive_html(
       }}
     }};
 
+    // Clean Labels toggle (clean / none / all)
+    let edgeLabelModes = ["clean", "none", "all"];
+    let edgeLabelModeIdx = 0;
+
+    function updateEdgeLabels() {{
+      const currentMode = edgeLabelModes[edgeLabelModeIdx];
+      const btn = document.getElementById("btn-labels");
+      if (currentMode === "clean") {{
+        btn.textContent = "🏷️ Clean Labels";
+        btn.classList.add("active");
+      }} else if (currentMode === "none") {{
+        btn.textContent = "🏷️ No Edge Labels";
+        btn.classList.remove("active");
+      }} else {{
+        btn.textContent = "🏷️ All Labels";
+        btn.classList.add("active");
+      }}
+
+      edges.forEach(e => {{
+        let newLabel = "";
+        const isContainment = e.raw && (e.raw.kind === "contains" || (e.raw.label && e.raw.label.startsWith("contains ")));
+        if (currentMode === "clean") {{
+          newLabel = isContainment ? "" : (e.raw ? (e.raw.label || e.raw.kind || "") : "");
+        }} else if (currentMode === "all") {{
+          newLabel = e.raw ? (e.raw.label || e.raw.kind || "") : "";
+        }} else {{
+          newLabel = "";
+        }}
+        edges.update({{ id: e.id, label: newLabel }});
+      }});
+    }}
+
+    document.getElementById("btn-labels").onclick = function() {{
+      edgeLabelModeIdx = (edgeLabelModeIdx + 1) % edgeLabelModes.length;
+      updateEdgeLabels();
+    }};
+
+    // Spacing toggle (Normal: 220px vs Wide: 320px)
+    let wideSpacing = false;
+    document.getElementById("btn-spacing").onclick = function() {{
+      wideSpacing = !wideSpacing;
+      this.classList.toggle("active", wideSpacing);
+      this.textContent = wideSpacing ? "↔️ Wide Spacing" : "↔️ Spacing";
+
+      network2d.setOptions({{
+        physics: {{
+          forceAtlas2Based: {{
+            springLength: wideSpacing ? 320 : 220,
+            gravitationalConstant: wideSpacing ? -300 : -180,
+            centralGravity: wideSpacing ? 0.003 : 0.005,
+            springConstant: 0.05,
+            damping: 0.28,
+            avoidOverlap: 1.0
+          }}
+        }}
+      }});
+      network2d.startSimulation();
+    }};
+
     document.getElementById("btn-toggle-sidebar").onclick = function() {{
       const sb = document.getElementById("sidebar");
       sb.style.display = sb.style.display === "none" ? "flex" : "none";
@@ -938,6 +1087,23 @@ def to_interactive_html(
       const match = rawData.nodes.find(n => (n.path && n.path.toLowerCase().includes(val)) || (n.title && n.title.toLowerCase().includes(val)));
       if (match) focusNode(match.id);
     }});
+
+    // Deep link permalink support (e.g. #auth/models.py or #social_platform/auth/models.py)
+    function checkUrlHash() {{
+      if (window.location.hash) {{
+        const targetId = decodeURIComponent(window.location.hash.substring(1)).toLowerCase();
+        const found = rawData.nodes.find(n => 
+          n.id === targetId || 
+          (n.path && (n.path.toLowerCase() === targetId || targetId.endsWith(n.path.toLowerCase()) || n.path.toLowerCase().endsWith(targetId))) ||
+          (n.title && n.title.toLowerCase().includes(targetId))
+        );
+        if (found) {{
+          setTimeout(() => focusNode(found.id), 200);
+        }}
+      }}
+    }}
+    window.addEventListener("load", checkUrlHash);
+    window.addEventListener("hashchange", checkUrlHash);
 
     // ── Client-side Graph Q&A Engine ──────────────────────────────────────────
 
