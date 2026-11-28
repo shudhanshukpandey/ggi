@@ -225,6 +225,11 @@ __marimo__/
 
 node_modules/
 
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store
+
 # Test and verification screenshots
 screenshot_*.png
+
 
