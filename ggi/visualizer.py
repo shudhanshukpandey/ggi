@@ -74,6 +74,60 @@ def to_interactive_html(
     vis_script = f"<script>{vis_js_file.read_text(encoding='utf-8')}</script>" if vis_js_file.exists() else '<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>'
     vis_css = f"<style>{vis_css_file.read_text(encoding='utf-8')}</style>" if vis_css_file.exists() else ""
     three_script = f"<script>{three_js_file.read_text(encoding='utf-8')}</script>" if three_js_file.exists() else '<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>'
+    
+    # Polyfill Three.js Timer for 3d-force-graph compatibility (3d-force-graph uses kV.Timer when window.THREE is present)
+    timer_polyfill = """<script>
+    if (typeof THREE !== "undefined" && !THREE.Timer) {
+      THREE.Timer = class {
+        constructor() {
+          this._previousTime = 0;
+          this._currentTime = 0;
+          this._startTime = (typeof performance !== "undefined" ? performance.now() : Date.now());
+          this._delta = 0;
+          this._elapsed = 0;
+          this._timescale = 1;
+          this._document = typeof document !== "undefined" ? document : null;
+          this._pageVisibilityHandler = null;
+        }
+        connect(e) {
+          this._document = e;
+          if (e && typeof e.hidden !== "undefined") {
+            this._pageVisibilityHandler = () => { if (!this._document.hidden) this.reset(); };
+            e.addEventListener("visibilitychange", this._pageVisibilityHandler, false);
+          }
+        }
+        disconnect() {
+          if (this._pageVisibilityHandler && this._document) {
+            this._document.removeEventListener("visibilitychange", this._pageVisibilityHandler);
+            this._pageVisibilityHandler = null;
+          }
+          this._document = null;
+        }
+        getDelta() { return this._delta / 1e3; }
+        getElapsed() { return this._elapsed / 1e3; }
+        getTimescale() { return this._timescale; }
+        setTimescale(e) { this._timescale = e; return this; }
+        reset() {
+          this._currentTime = (typeof performance !== "undefined" ? performance.now() : Date.now()) - this._startTime;
+          return this;
+        }
+        dispose() { this.disconnect(); }
+        update(e) {
+          const now = (typeof e !== "undefined" ? e : (typeof performance !== "undefined" ? performance.now() : Date.now()));
+          if (this._pageVisibilityHandler && this._document && this._document.hidden) {
+            this._delta = 0;
+          } else {
+            this._previousTime = this._currentTime;
+            this._currentTime = now - this._startTime;
+            this._delta = (this._currentTime - this._previousTime) * this._timescale;
+            this._elapsed += this._delta;
+          }
+          return this;
+        }
+      };
+    }
+    </script>"""
+
     three_d_script = f"<script>{three_d_file.read_text(encoding='utf-8')}</script>" if three_d_file.exists() else '<script src="https://unpkg.com/3d-force-graph"></script>'
 
     html_content = f"""<!DOCTYPE html>
@@ -85,6 +139,7 @@ def to_interactive_html(
   {vis_css}
   {vis_script}
   {three_script}
+  {timer_polyfill}
   {three_d_script}
   <style>
     :root {{
@@ -873,60 +928,67 @@ def to_interactive_html(
     let hoverNode3D = null;
 
     function createTextSprite(text, color) {{
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      const fontSize = 26;
-      ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
-      const textWidth = ctx.measureText(text).width;
-      canvas.width = Math.max(textWidth + 24, 60);
-      canvas.height = fontSize + 18;
+      try {{
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const fontSize = 24;
+        ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
+        const textWidth = ctx.measureText(text || "").width || 60;
+        canvas.width = Math.max(textWidth + 24, 60);
+        canvas.height = fontSize + 18;
 
-      // Draw pill background
-      ctx.fillStyle = "rgba(7, 10, 19, 0.90)";
-      ctx.strokeStyle = color || "#38bdf8";
-      ctx.lineWidth = 2.5;
+        // Draw pill background
+        ctx.fillStyle = "rgba(7, 10, 19, 0.90)";
+        ctx.strokeStyle = color || "#38bdf8";
+        ctx.lineWidth = 2.5;
 
-      const r = 8;
-      const x = 2, y = 2, w = canvas.width - 4, h = canvas.height - 4;
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-      ctx.lineTo(x + r, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+        const r = 8;
+        const x = 2, y = 2, w = canvas.width - 4, h = canvas.height - 4;
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
 
-      // Draw text
-      ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        // Draw text
+        ctx.font = `600 ${{fontSize}}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text || "", canvas.width / 2, canvas.height / 2);
 
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      const spriteMat = new THREE.SpriteMaterial({{ map: texture, depthWrite: false }});
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(canvas.width / 8.5, canvas.height / 8.5, 1);
-      return sprite;
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const spriteMat = new THREE.SpriteMaterial({{ map: texture, depthWrite: false }});
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.scale.set(canvas.width / 9, canvas.height / 9, 1);
+        return sprite;
+      }} catch (err) {{
+        console.warn("createTextSprite fallback:", err);
+        return new THREE.Group();
+      }}
     }}
 
     function init3DView() {{
       const container3d = document.getElementById("network-3d");
-      if (typeof ForceGraph3D === "undefined" || typeof THREE === "undefined") {{
-        alert("3D library loading... please check network connection or use 2D Fluid mode.");
+      const fgFunc = window.ForceGraph3D || (typeof ForceGraph3D !== "undefined" ? ForceGraph3D : null);
+      if (!fgFunc || typeof THREE === "undefined") {{
+        console.warn("3D library not ready:", {{ fgFunc: !!fgFunc, THREE: typeof THREE !== "undefined" }});
+        alert("3D library is loading or WebGL is disabled... please check connection or use 2D Fluid mode.");
         return;
       }}
 
       // Pre-format nodes for 3D
       const gNodes = rawData.nodes.map(n => {{
-        let label = n.title || n.name || n.id;
+        let label = n.title || n.name || n.id || "";
         if (n.path) {{
           const parts = n.path.split("/").filter(Boolean);
           if (n.kind === "directory") {{
@@ -978,168 +1040,197 @@ def to_interactive_html(
       const initW = container3d.clientWidth || (window.innerWidth - (sidebarOpen ? 440 : 0));
       const initH = container3d.clientHeight || (window.innerHeight - 56);
 
-      graph3dInstance = ForceGraph3D()(container3d)
-        .width(initW)
-        .height(initH)
-        .backgroundColor("#020617")
-        .graphData({{ nodes: gNodes, links: gLinks }})
-        .nodeLabel(n => `<b>${{n.raw.path || n.raw.title || n.id}}</b><br><span style='color:${{n.color}}'>Kind: ${{n.kind}}</span>`)
-        .nodeThreeObject(node => {{
-          const group = new THREE.Group();
-          const baseColor = new THREE.Color(node.color);
+      try {{
+        graph3dInstance = fgFunc({{ controlType: "orbit" }})(container3d)
+          .width(initW)
+          .height(initH)
+          .backgroundColor("#020617")
+          .graphData({{ nodes: gNodes, links: gLinks }})
+          .nodeLabel(n => `<b>${{escapeHtml(n.raw.path || n.raw.title || n.id)}}</b><br><span style='color:${{n.color}}'>Kind: ${{n.kind}}</span>`)
+          .nodeThreeObject(node => {{
+            try {{
+              const group = new THREE.Group();
+              const baseColor = new THREE.Color(node.color);
 
-          let mesh;
-          if (node.kind === "directory") {{
-            // Planetary Sphere with glowing rings
-            const geom = new THREE.SphereGeometry(6.5, 20, 20);
-            const mat = new THREE.MeshPhongMaterial({{
-              color: baseColor,
-              emissive: baseColor,
-              emissiveIntensity: 0.35,
-              shininess: 90
-            }});
-            mesh = new THREE.Mesh(geom, mat);
-            group.add(mesh);
+              let mesh;
+              if (node.kind === "directory") {{
+                // Planetary Sphere with glowing rings
+                const geom = new THREE.SphereGeometry(6.5, 20, 20);
+                const mat = new THREE.MeshPhongMaterial({{
+                  color: baseColor,
+                  emissive: baseColor,
+                  emissiveIntensity: 0.35,
+                  shininess: 90
+                }});
+                mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
 
-            // Planetary Ring
-            const ringGeom = new THREE.RingGeometry(8.5, 12, 32);
-            const ringMat = new THREE.MeshBasicMaterial({{
-              color: baseColor,
-              side: THREE.DoubleSide,
-              transparent: true,
-              opacity: 0.45
-            }});
-            const ring = new THREE.Mesh(ringGeom, ringMat);
-            ring.rotation.x = Math.PI / 2.5;
-            group.add(ring);
-          }} else if (node.kind === "change") {{
-            // Ruby gem octahedron
-            const geom = new THREE.OctahedronGeometry(6.2);
-            const mat = new THREE.MeshPhongMaterial({{
-              color: baseColor,
-              emissive: baseColor,
-              emissiveIntensity: 0.45,
-              shininess: 100
-            }});
-            mesh = new THREE.Mesh(geom, mat);
-            group.add(mesh);
-          }} else if (node.kind === "agent") {{
-            // Tech cuboid
-            const geom = new THREE.BoxGeometry(6.5, 6.5, 6.5);
-            const mat = new THREE.MeshLambertMaterial({{
-              color: baseColor,
-              emissive: baseColor,
-              emissiveIntensity: 0.25
-            }});
-            mesh = new THREE.Mesh(geom, mat);
-            group.add(mesh);
-          }} else {{
-            // Luminous sphere for files
-            const geom = new THREE.SphereGeometry(4.2, 16, 16);
-            const mat = new THREE.MeshPhongMaterial({{
-              color: baseColor,
-              emissive: baseColor,
-              emissiveIntensity: 0.25,
-              shininess: 80
-            }});
-            mesh = new THREE.Mesh(geom, mat);
-            group.add(mesh);
-          }}
+                // Planetary Ring
+                const ringGeom = new THREE.RingGeometry(8.5, 12, 32);
+                const ringMat = new THREE.MeshBasicMaterial({{
+                  color: baseColor,
+                  side: THREE.DoubleSide,
+                  transparent: true,
+                  opacity: 0.45
+                }});
+                const ring = new THREE.Mesh(ringGeom, ringMat);
+                ring.rotation.x = Math.PI / 2.5;
+                group.add(ring);
+              }} else if (node.kind === "change") {{
+                // Ruby gem octahedron
+                const geom = new THREE.OctahedronGeometry(6.2);
+                const mat = new THREE.MeshPhongMaterial({{
+                  color: baseColor,
+                  emissive: baseColor,
+                  emissiveIntensity: 0.45,
+                  shininess: 100
+                }});
+                mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
+              }} else if (node.kind === "agent") {{
+                // Tech cuboid
+                const geom = new THREE.BoxGeometry(6.5, 6.5, 6.5);
+                const mat = new THREE.MeshLambertMaterial({{
+                  color: baseColor,
+                  emissive: baseColor,
+                  emissiveIntensity: 0.25
+                }});
+                mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
+              }} else {{
+                // Luminous sphere for files
+                const geom = new THREE.SphereGeometry(4.2, 16, 16);
+                const mat = new THREE.MeshPhongMaterial({{
+                  color: baseColor,
+                  emissive: baseColor,
+                  emissiveIntensity: 0.25,
+                  shininess: 80
+                }});
+                mesh = new THREE.Mesh(geom, mat);
+                group.add(mesh);
+              }}
 
-          // Billboard 3D Label Badge
-          const sprite = createTextSprite(node.name, node.color);
-          sprite.position.y = (node.kind === "directory" ? 10 : 8);
-          group.add(sprite);
+              // Billboard 3D Label Badge
+              const sprite = createTextSprite(node.name, node.color);
+              sprite.position.y = (node.kind === "directory" ? 10 : 8);
+              group.add(sprite);
 
-          return group;
-        }})
-        .linkWidth(link => {{
-          if (highlightLinks3D.size > 0) {{
-            return highlightLinks3D.has(link) ? 3.2 : 0.4;
-          }}
-          return link.isContainment ? 0.8 : 1.6;
-        }})
-        .linkColor(link => {{
-          if (highlightLinks3D.size > 0) {{
-            return highlightLinks3D.has(link) ? "#38bdf8" : "rgba(100, 116, 139, 0.08)";
-          }}
-          const isCall = link.raw && (link.raw.kind === "calls" || (link.raw.label && link.raw.label.toLowerCase().includes("api")));
-          const isChange = link.raw && (link.raw.kind === "implements" || link.raw.kind === "corrects");
-          return isCall ? "rgba(56, 189, 248, 0.55)" : (isChange ? "rgba(244, 63, 94, 0.55)" : "rgba(148, 163, 184, 0.25)");
-        }})
-        .linkDirectionalParticles(link => {{
-          if (!pulsesEnabled) return 0;
-          if (highlightLinks3D.size > 0) {{
-            return highlightLinks3D.has(link) ? 5 : 0;
-          }}
-          return link.isContainment ? 1 : 3;
-        }})
-        .linkDirectionalParticleSpeed(0.007)
-        .linkDirectionalParticleWidth(2.5)
-        .linkDirectionalParticleColor(l => {{
-          const isCall = l.raw && (l.raw.kind === "calls" || (l.raw.label && l.raw.label.toLowerCase().includes("api")));
-          const isChange = l.raw && (l.raw.kind === "implements" || l.raw.kind === "corrects");
-          return isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
-        }})
-        .onNodeHover(node => {{
-          if ((!node && !highlightNodes3D.size) || (node && hoverNode3D === node)) return;
-          highlightNodes3D.clear();
-          highlightLinks3D.clear();
+              return group;
+            }} catch (nodeErr) {{
+              console.warn("Fallback for node", node.id, nodeErr);
+              const fallbackGeom = new THREE.SphereGeometry(4, 12, 12);
+              const fallbackMat = new THREE.MeshBasicMaterial({{ color: node.color || "#38bdf8" }});
+              return new THREE.Mesh(fallbackGeom, fallbackMat);
+            }}
+          }})
+          .linkWidth(link => {{
+            if (highlightLinks3D.size > 0) {{
+              return highlightLinks3D.has(link) ? 3.2 : 0.4;
+            }}
+            return link.isContainment ? 0.8 : 1.6;
+          }})
+          .linkColor(link => {{
+            if (highlightLinks3D.size > 0) {{
+              return highlightLinks3D.has(link) ? "#38bdf8" : "rgba(100, 116, 139, 0.08)";
+            }}
+            const isCall = link.raw && (link.raw.kind === "calls" || (link.raw.label && link.raw.label.toLowerCase().includes("api")));
+            const isChange = link.raw && (link.raw.kind === "implements" || link.raw.kind === "corrects");
+            return isCall ? "rgba(56, 189, 248, 0.55)" : (isChange ? "rgba(244, 63, 94, 0.55)" : "rgba(148, 163, 184, 0.25)");
+          }})
+          .linkDirectionalParticles(link => {{
+            if (!pulsesEnabled) return 0;
+            if (highlightLinks3D.size > 0) {{
+              return highlightLinks3D.has(link) ? 5 : 0;
+            }}
+            return link.isContainment ? 1 : 3;
+          }})
+          .linkDirectionalParticleSpeed(0.007)
+          .linkDirectionalParticleWidth(2.5)
+          .linkDirectionalParticleColor(l => {{
+            const isCall = l.raw && (l.raw.kind === "calls" || (l.raw.label && l.raw.label.toLowerCase().includes("api")));
+            const isChange = l.raw && (l.raw.kind === "implements" || l.raw.kind === "corrects");
+            return isCall ? "#38bdf8" : (isChange ? "#f43f5e" : "#818cf8");
+          }})
+          .onNodeHover(node => {{
+            if ((!node && !highlightNodes3D.size) || (node && hoverNode3D === node)) return;
+            highlightNodes3D.clear();
+            highlightLinks3D.clear();
 
-          if (node) {{
-            highlightNodes3D.add(node);
-            node.neighbors.forEach(neighbor => highlightNodes3D.add(neighbor));
-            node.links.forEach(link => highlightLinks3D.add(link));
-          }}
-          hoverNode3D = node || null;
+            if (node) {{
+              highlightNodes3D.add(node);
+              (node.neighbors || []).forEach(neighbor => highlightNodes3D.add(neighbor));
+              (node.links || []).forEach(link => highlightLinks3D.add(link));
+            }}
+            hoverNode3D = node || null;
 
-          graph3dInstance
-            .linkWidth(graph3dInstance.linkWidth())
-            .linkColor(graph3dInstance.linkColor())
-            .linkDirectionalParticles(graph3dInstance.linkDirectionalParticles());
-        }})
-        .onNodeClick(n => {{
-          inspectNode(n.id, true);
-          // Fly camera to node
-          const distance = 48;
-          const distRatio = 1 + distance/Math.hypot(n.x, n.y, n.z);
-          graph3dInstance.cameraPosition(
-            {{ x: n.x * distRatio, y: n.y * distRatio, z: n.z * distRatio }},
-            n,
-            1200
-          );
-        }});
+            graph3dInstance
+              .linkWidth(graph3dInstance.linkWidth())
+              .linkColor(graph3dInstance.linkColor())
+              .linkDirectionalParticles(graph3dInstance.linkDirectionalParticles());
+          }})
+          .onNodeClick(n => {{
+            inspectNode(n.id, true);
+            // Fly camera to node safely without division by zero
+            const distance = 48;
+            const hyp = Math.hypot(n.x || 0, n.y || 0, n.z || 0) || 1;
+            const distRatio = 1 + distance / hyp;
+            graph3dInstance.cameraPosition(
+              {{ x: (n.x || 0) * distRatio, y: (n.y || 0) * distRatio, z: (n.z || 0) * distRatio }},
+              n,
+              1200
+            );
+          }});
+      }} catch (err) {{
+        console.error("ForceGraph3D init failed:", err);
+        alert("Failed to initialize 3D Galaxy view: " + err.message);
+        is3DMode = false;
+        const navBtn = document.getElementById("btn-view-mode");
+        navBtn.textContent = "🌌 3D Galaxy";
+        navBtn.classList.remove("active");
+        container3d.style.display = "none";
+        document.getElementById("network").style.display = "block";
+        return;
+      }}
 
       // Add Cosmic Starfield to 3D Scene
-      const scene = graph3dInstance.scene();
-      const starCount = 1800;
-      const starGeom = new THREE.BufferGeometry();
-      const starPos = new Float32Array(starCount * 3);
-      for (let i = 0; i < starCount * 3; i += 3) {{
-        starPos[i] = (Math.random() - 0.5) * 3000;
-        starPos[i+1] = (Math.random() - 0.5) * 3000;
-        starPos[i+2] = (Math.random() - 0.5) * 3000;
-      }}
-      starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-      const starMat = new THREE.PointsMaterial({{
-        color: 0x93c5fd,
-        size: 1.8,
-        transparent: true,
-        opacity: 0.65
-      }});
-      const starField = new THREE.Points(starGeom, starMat);
-      scene.add(starField);
+      try {{
+        const scene = graph3dInstance.scene();
+        const starCount = 1800;
+        const starGeom = new THREE.BufferGeometry();
+        const starPos = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount * 3; i += 3) {{
+          starPos[i] = (Math.random() - 0.5) * 3000;
+          starPos[i+1] = (Math.random() - 0.5) * 3000;
+          starPos[i+2] = (Math.random() - 0.5) * 3000;
+        }}
+        starGeom.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({{
+          color: 0x93c5fd,
+          size: 1.8,
+          transparent: true,
+          opacity: 0.65
+        }});
+        const starField = new THREE.Points(starGeom, starMat);
+        scene.add(starField);
 
-      // Add ambient and directional lights for specular reflections
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
-      scene.add(ambientLight);
-      const sunLight = new THREE.DirectionalLight(0xbae6fd, 1.2);
-      sunLight.position.set(150, 250, 200);
-      scene.add(sunLight);
+        // Add ambient and directional lights for specular reflections
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+        scene.add(ambientLight);
+        const sunLight = new THREE.DirectionalLight(0xbae6fd, 1.2);
+        sunLight.position.set(150, 250, 200);
+        scene.add(sunLight);
+      }} catch (lightErr) {{
+        console.warn("Starfield setup error:", lightErr);
+      }}
 
       // Auto-orbiting camera movement
-      graph3dInstance.controls().autoRotate = true;
-      graph3dInstance.controls().autoRotateSpeed = 0.6;
+      try {{
+        const ctrl = graph3dInstance.controls();
+        if (ctrl) {{
+          ctrl.autoRotate = motionEnabled;
+          ctrl.autoRotateSpeed = 0.6;
+        }}
+      }} catch (e) {{}}
     }}
 
     // Toggle 2D / 3D Mode
@@ -1157,6 +1248,11 @@ def to_interactive_html(
           init3DView();
         }} else {{
           graph3dInstance.resumeAnimation();
+          setTimeout(() => {{
+            const w = c3d.clientWidth || (window.innerWidth - (sidebarOpen ? 440 : 0));
+            const h = c3d.clientHeight || (window.innerHeight - 56);
+            graph3dInstance.width(w).height(h);
+          }}, 50);
         }}
       }} else {{
         this.textContent = "🌌 3D Galaxy";
@@ -1167,6 +1263,16 @@ def to_interactive_html(
         network2d.fit();
       }}
     }};
+
+    // Window resize handler for 3D and 2D
+    window.addEventListener("resize", function() {{
+      if (is3DMode && graph3dInstance) {{
+        const c3d = document.getElementById("network-3d");
+        const w = c3d.clientWidth || (window.innerWidth - (sidebarOpen ? 440 : 0));
+        const h = c3d.clientHeight || (window.innerHeight - 56);
+        graph3dInstance.width(w).height(h);
+      }}
+    }});
 
     // 2D Node click & background click handler (with neighborhood focus)
     network2d.on("click", function(params) {{
@@ -1275,9 +1381,10 @@ def to_interactive_html(
         const n3d = gData.nodes.find(n => n.id === nodeId);
         if (n3d) {{
           const distance = 48;
-          const distRatio = 1 + distance/Math.hypot(n3d.x, n3d.y, n3d.z);
+          const hyp = Math.hypot(n3d.x || 0, n3d.y || 0, n3d.z || 0) || 1;
+          const distRatio = 1 + distance / hyp;
           graph3dInstance.cameraPosition(
-            {{ x: n3d.x * distRatio, y: n3d.y * distRatio, z: n3d.z * distRatio }},
+            {{ x: (n3d.x || 0) * distRatio, y: (n3d.y || 0) * distRatio, z: (n3d.z || 0) * distRatio }},
             n3d,
             1200
           );
@@ -1311,7 +1418,10 @@ def to_interactive_html(
       motionEnabled = !motionEnabled;
       this.classList.toggle("active", motionEnabled);
       if (is3DMode && graph3dInstance) {{
-        graph3dInstance.controls().autoRotate = motionEnabled;
+        try {{
+          const ctrl = graph3dInstance.controls();
+          if (ctrl) ctrl.autoRotate = motionEnabled;
+        }} catch (e) {{}}
       }} else if (motionEnabled) {{
         network2d.startSimulation();
       }}
