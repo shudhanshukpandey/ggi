@@ -1,0 +1,129 @@
+flowchart TD
+    70d4e54b9276[". 📁"]
+    516fd7550d66["auth 📁"]
+    15b60f12fcdd["calls 📁"]
+    b352d11fd468["chat 📁"]
+    4a470c0be358["posts 📁"]
+    9a0e0cd15eeb["privacy 📁"]
+    040eed9f5c21["storage 📁"]
+    9500490c28e9["utils 📁"]
+    f72d79ab0fed["README.md"]
+    61ed940b53a4["__init__.py"]
+    31f41de36999["app.py"]
+    b3bc8c495cd4["config.py"]
+    454f2c3f6346["auth/__init__.py"]
+    8d98e9bea928["auth/middleware.py"]
+    1457dcf20337["auth/models.py"]
+    db8f64fb6c98["auth/service.py"]
+    29f40be6eae9["calls/__init__.py"]
+    9fa483705975["calls/models.py"]
+    e7e008d6263d["calls/room_manager.py"]
+    fdd14f468996["calls/signaling.py"]
+    2a29b1a30b59["chat/__init__.py"]
+    9328d306a12e["chat/gateway.py"]
+    efb0a16528a2["chat/manager.py"]
+    de089919e793["chat/models.py"]
+    df30e3f80dba["posts/__init__.py"]
+    eba15483cf08["posts/models.py"]
+    0a146128d763["posts/router.py"]
+    025c56cc9fc7["posts/service.py"]
+    65494ad3ced5["privacy/__init__.py"]
+    84c1bcc15960["privacy/audit.py"]
+    e001af06f6c8["privacy/enums.py"]
+    fae1cb041c61["privacy/policy.py"]
+    8b96361e0c95["storage/__init__.py"]
+    3eb8d37e648c["storage/s3_adapter.py"]
+    8495603d92f9["storage/vault.py"]
+    e711a21b6e1b["utils/__init__.py"]
+    3983ca39d84f["utils/logger.py"]
+    1c5ea87b8732["utils/validator.py"]
+    8d824ee475c9("Implement Policy-Based Privacy Engine 🔧")
+    agent_SecurityTeam["agent:SecurityTeam 🤖"]
+    55e0eaadb59f("Implement Posts & Dynamic Feed Service 🔧")
+    agent_FeedTeam["agent:FeedTeam 🤖"]
+    f41bcb6ca930("Implement Real-time Chat Gateway 🔧")
+    agent_ChatTeam["agent:ChatTeam 🤖"]
+    ad3ab5a14c69("Implement WebRTC Calling & SDP Signaling 🔧")
+    agent_MediaTeam["agent:MediaTeam 🤖"]
+    40114ab928c8("Implement Dual Storage Architecture 🔧")
+    agent_InfraTeam["agent:InfraTeam 🤖"]
+    3cc8e9ea51dd("Fix Private Post Leakage in Public Feed Aggregation 🔧")
+    ann_fa7ce6ba["ann:fa7ce6ba"]
+    ac1fc737359d("Fix WebRTC SDP Signaling Race Condition in Call Setup 🔧")
+    ann_d023f1d9["ann:d023f1d9"]
+    89657e29a780("Fix WebSocket Heartbeat Timeout on Mobile Clients 🔧")
+    70d4e54b9276 -->|"contains auth"| 516fd7550d66
+    70d4e54b9276 -->|"contains calls"| 15b60f12fcdd
+    70d4e54b9276 -->|"contains chat"| b352d11fd468
+    70d4e54b9276 -->|"contains posts"| 4a470c0be358
+    70d4e54b9276 -->|"contains privacy"| 9a0e0cd15eeb
+    70d4e54b9276 -->|"contains storage"| 040eed9f5c21
+    70d4e54b9276 -->|"contains utils"| 9500490c28e9
+    70d4e54b9276 -->|"contains README.md"| f72d79ab0fed
+    70d4e54b9276 -->|"contains __init__.py"| 61ed940b53a4
+    70d4e54b9276 -->|"contains app.py"| 31f41de36999
+    70d4e54b9276 -->|"contains config.py"| b3bc8c495cd4
+    516fd7550d66 -->|"contains __init__.py"| 454f2c3f6346
+    516fd7550d66 -->|"contains middleware.py"| 8d98e9bea928
+    516fd7550d66 -->|"contains models.py"| 1457dcf20337
+    516fd7550d66 -->|"contains service.py"| db8f64fb6c98
+    15b60f12fcdd -->|"contains __init__.py"| 29f40be6eae9
+    15b60f12fcdd -->|"contains models.py"| 9fa483705975
+    15b60f12fcdd -->|"contains room_manager.py"| e7e008d6263d
+    15b60f12fcdd -->|"contains signaling.py"| fdd14f468996
+    b352d11fd468 -->|"contains __init__.py"| 2a29b1a30b59
+    b352d11fd468 -->|"contains gateway.py"| 9328d306a12e
+    b352d11fd468 -->|"contains manager.py"| efb0a16528a2
+    b352d11fd468 -->|"contains models.py"| de089919e793
+    4a470c0be358 -->|"contains __init__.py"| df30e3f80dba
+    4a470c0be358 -->|"contains models.py"| eba15483cf08
+    4a470c0be358 -->|"contains router.py"| 0a146128d763
+    4a470c0be358 -->|"contains service.py"| 025c56cc9fc7
+    9a0e0cd15eeb -->|"contains __init__.py"| 65494ad3ced5
+    9a0e0cd15eeb -->|"contains audit.py"| 84c1bcc15960
+    9a0e0cd15eeb -->|"contains enums.py"| e001af06f6c8
+    9a0e0cd15eeb -->|"contains policy.py"| fae1cb041c61
+    040eed9f5c21 -->|"contains __init__.py"| 8b96361e0c95
+    040eed9f5c21 -->|"contains s3_adapter.py"| 3eb8d37e648c
+    040eed9f5c21 -->|"contains vault.py"| 8495603d92f9
+    9500490c28e9 -->|"contains __init__.py"| e711a21b6e1b
+    9500490c28e9 -->|"contains logger.py"| 3983ca39d84f
+    9500490c28e9 -->|"contains validator.py"| 1c5ea87b8732
+    31f41de36999 -->|"orchestrates service"| db8f64fb6c98
+    31f41de36999 -->|"orchestrates service"| fae1cb041c61
+    31f41de36999 -->|"orchestrates service"| 025c56cc9fc7
+    31f41de36999 -->|"orchestrates service"| 9328d306a12e
+    31f41de36999 -->|"orchestrates service"| fdd14f468996
+    fdd14f468996 -->|"authenticates caller/callee"| db8f64fb6c98
+    fdd14f468996 -->|"manages active call rooms"| e7e008d6263d
+    fdd14f468996 -->|"annotation"| ann_d023f1d9
+    9328d306a12e -->|"authenticates socket tokens"| db8f64fb6c98
+    9328d306a12e -->|"checks DM authorization"| fae1cb041c61
+    9328d306a12e -->|"tracks active user sockets"| efb0a16528a2
+    9328d306a12e -->|"stores encrypted DM attachments"| 8495603d92f9
+    0a146128d763 -->|"dispatches feed queries"| 025c56cc9fc7
+    025c56cc9fc7 -->|"enforces can_view visibility"| fae1cb041c61
+    025c56cc9fc7 -->|"uploads public post media"| 3eb8d37e648c
+    025c56cc9fc7 -->|"annotation"| ann_fa7ce6ba
+    fae1cb041c61 -->|"uses VisibilityLevel enum"| e001af06f6c8
+    8d824ee475c9 -->|"Implement Policy-Based Privacy Engine"| fae1cb041c61
+    8d824ee475c9 -->|"Implement Policy-Based Privacy Engine"| e001af06f6c8
+    8d824ee475c9 -->|"by SecurityTeam"| agent_SecurityTeam
+    55e0eaadb59f -->|"Implement Posts & Dynamic Feed Service"| 025c56cc9fc7
+    55e0eaadb59f -->|"Implement Posts & Dynamic Feed Service"| 0a146128d763
+    55e0eaadb59f -->|"by FeedTeam"| agent_FeedTeam
+    f41bcb6ca930 -->|"Implement Real-time Chat Gateway"| 9328d306a12e
+    f41bcb6ca930 -->|"Implement Real-time Chat Gateway"| efb0a16528a2
+    f41bcb6ca930 -->|"by ChatTeam"| agent_ChatTeam
+    ad3ab5a14c69 -->|"Implement WebRTC Calling & SDP Signaling"| fdd14f468996
+    ad3ab5a14c69 -->|"Implement WebRTC Calling & SDP Signaling"| e7e008d6263d
+    ad3ab5a14c69 -->|"by MediaTeam"| agent_MediaTeam
+    40114ab928c8 -->|"Implement Dual Storage Architecture"| 3eb8d37e648c
+    40114ab928c8 -->|"Implement Dual Storage Architecture"| 8495603d92f9
+    40114ab928c8 -->|"by InfraTeam"| agent_InfraTeam
+    3cc8e9ea51dd -->|"Fix Private Post Leakage in Public Feed Aggregation"| 025c56cc9fc7
+    3cc8e9ea51dd -->|"by SecurityTeam"| agent_SecurityTeam
+    ac1fc737359d -->|"Fix WebRTC SDP Signaling Race Condition in Call Setup"| fdd14f468996
+    ac1fc737359d -->|"by MediaTeam"| agent_MediaTeam
+    89657e29a780 -->|"Fix WebSocket Heartbeat Timeout on Mobile Clients"| 9328d306a12e
+    89657e29a780 -->|"by ChatTeam"| agent_ChatTeam
